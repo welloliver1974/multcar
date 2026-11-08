@@ -411,5 +411,29 @@ Com o layout em orientação vertical (retrato) no smartphone apresentando espa�
    * Memorização persistente no `localStorage` do smartphone, registrando o menor tempo histórico de aceleração com badge comemorativo.
 
 ---
-*Relatório atualizado em 08/nov/2026 com Computador de Bordo Dinâmico, Parecer de Voz IA e sincronização Git.*
+
+## 19. CLI Automático da VPS: `multcar att`
+
+Para facilitar a manutenção contínua e eliminar comandos longos no terminal da VPS, foi criado o CLI `multcar`:
+
+* **Instalação em 1 Toque:**
+  ```bash
+  curl -fsSL https://raw.githubusercontent.com/welloliver1974/multcar/main/install-cli.sh | bash
+  ```
+* **Comando de Atualização Automática:**
+  ```bash
+  multcar att
+  ```
+  *(ou `multcar update`)*
+* **O que ele faz por trás dos panos:**
+  1. Conecta ao repositório GitHub e baixa as últimas atualizações da branch `main`.
+  2. Reconstrói os containers Docker sem cache ou reinicia o serviço Node/PM2.
+  3. Atualiza os arquivos estáticos do PWA e o instalador nativo do APK na porta 3030.
+* **Outros comandos rápidos:**
+  * `multcar status`: Exibe o estado em tempo real dos containers.
+  * `multcar logs`: Acompanha a saída de logs do Nginx / servidor.
+  * `multcar restart`: Reinicia rapidamente os serviços.
+
+---
+*Relatório atualizado em 08/nov/2026 com CLI multcar att, Computador de Bordo Dinâmico e sincronização Git.*
 

@@ -1,0 +1,116 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# CLI Oficial do Multcar Pro para VPS Linux
+# ==============================================================================
+# Uso:
+#   multcar att       -> Baixa as novidades do GitHub e atualiza tudo automaticamente
+#   multcar status    -> Verifica se o app/container está rodando
+#   multcar logs      -> Mostra os logs do app em tempo real
+#   multcar restart   -> Reinicia o container
+# ==============================================================================
+
+set -e
+
+APP_DIR="/opt/multcar"
+if [ ! -d "$APP_DIR" ] && [ -d "$HOME/multcar" ]; then
+    APP_DIR="$HOME/multcar"
+fi
+
+# Cores
+GREEN='\033[0;32m'
+CYAN='\033[0;36m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+NC='\033[0m'
+
+action="${1:-help}"
+
+case "$action" in
+    att|update|up)
+        echo -e "${CYAN}======================================================${NC}"
+        echo -e "${GREEN}   🏎️  MULTCAR PRO — ATUALIZAÇÃO AUTOMÁTICA          ${NC}"
+        echo -e "${CYAN}======================================================${NC}"
+        
+        if [ ! -d "$APP_DIR" ]; then
+            echo -e "${YELLOW}Pasta $APP_DIR não encontrada. Executando instalação completa...${NC}"
+            curl -fsSL https://raw.githubusercontent.com/welloliver1974/multcar/main/deploy.sh | bash
+            exit 0
+        fi
+
+        cd "$APP_DIR"
+        echo -e "${YELLOW}[1/2] Baixando novidades do GitHub...${NC}"
+        git fetch origin main
+        git reset --hard origin/main
+        git pull origin main
+
+        echo -e "${YELLOW}[2/2] Atualizando containers...${NC}"
+        if docker compose version &> /dev/null; then
+            docker compose down || true
+            docker compose build --no-cache
+            docker compose up -d
+        elif command -v docker-compose &> /dev/null; then
+            docker-compose down || true
+            docker-compose build --no-cache
+            docker-compose up -d
+        elif command -v pm2 &> /dev/null; then
+            pm2 restart multcar || pm2 start server.js --name "multcar"
+        fi
+
+        # Garante que o comando multcar continue atualizado no PATH
+        sudo cp -f "$APP_DIR/bin/multcar" /usr/local/bin/multcar 2>/dev/null || true
+        sudo chmod +x /usr/local/bin/multcar 2>/dev/null || true
+
+        echo -e "${CYAN}======================================================${NC}"
+        echo -e "${GREEN}✅ MULTCAR ATUALIZADO COM SUCESSO!${NC}"
+        echo -e "O painel e o download do APK estão 100% atualizados na porta ${YELLOW}3030${NC}."
+        echo -e "${CYAN}======================================================${NC}"
+        ;;
+
+    status)
+        echo -e "${CYAN}--- Status do Multcar ---${NC}"
+        cd "$APP_DIR" 2>/dev/null || true
+        if docker compose version &> /dev/null; then
+            docker compose ps
+        elif command -v docker-compose &> /dev/null; then
+            docker-compose ps
+        elif command -v pm2 &> /dev/null; then
+            pm2 status multcar
+        fi
+        ;;
+
+    logs)
+        cd "$APP_DIR" 2>/dev/null || true
+        if docker compose version &> /dev/null; then
+            docker compose logs -f --tail=50
+        elif command -v docker-compose &> /dev/null; then
+            docker-compose logs -f --tail=50
+        elif command -v pm2 &> /dev/null; then
+            pm2 logs multcar
+        fi
+        ;;
+
+    restart)
+        cd "$APP_DIR" 2>/dev/null || true
+        if docker compose version &> /dev/null; then
+            docker compose restart
+        elif command -v docker-compose &> /dev/null; then
+            docker-compose restart
+        elif command -v pm2 &> /dev/null; then
+            pm2 restart multcar
+        fi
+        echo -e "${GREEN}Multcar reiniciado com sucesso!${NC}"
+        ;;
+
+    help|*)
+        echo -e "${CYAN}======================================================${NC}"
+        echo -e "${GREEN}   🏎️  MULTCAR PRO — COMANDOS RÁPIDOS DA VPS         ${NC}"
+        echo -e "${CYAN}======================================================${NC}"
+        echo -e "Uso direto: ${YELLOW}multcar <comando>${NC}\n"
+        echo -e "Comandos:"
+        echo -e "  ${GREEN}multcar att${NC}      -> Atualiza o Multcar com tudo que subimos pro Git"
+        echo -e "  ${GREEN}multcar status${NC}   -> Verifica se o container está rodando"
+        echo -e "  ${GREEN}multcar logs${NC}     -> Acompanha os logs em tempo real"
+        echo -e "  ${GREEN}multcar restart${NC}  -> Reinicia o container"
+        echo -e "${CYAN}======================================================${NC}"
+        ;;
+esac

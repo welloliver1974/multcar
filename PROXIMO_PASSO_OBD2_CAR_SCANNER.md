@@ -42,11 +42,17 @@
 
 ---
 
-## 3. Deploy Rápido na VPS Linux
+## 3. Comandos Rápidos na VPS Linux
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/welloliver1974/multcar/main/deploy.sh | bash
-```
+- **Atualização Direta com 1 Comando:**
+  ```bash
+  multcar att
+  ```
+- **Se for o primeiro acesso à VPS:**
+  ```bash
+  curl -fsSL https://raw.githubusercontent.com/welloliver1974/multcar/main/deploy.sh | bash
+  ```
+- **Outros comandos úteis:** `multcar status`, `multcar logs`, `multcar restart`.
 
 ---
 

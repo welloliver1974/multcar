@@ -91,6 +91,21 @@ else
     exit 1
 fi
 
+# 4. Instala o comando CLI global "multcar" no sistema
+echo -e "${YELLOW}[4/4] Instalando atalho global 'multcar' em /usr/local/bin/multcar...${NC}"
+if [ -f "$APP_DIR/bin/multcar" ]; then
+    sudo cp -f "$APP_DIR/bin/multcar" /usr/local/bin/multcar
+    sudo chmod +x /usr/local/bin/multcar
+    echo -e "${GREEN}Atalho 'multcar' instalado com sucesso!${NC}"
+fi
+
+echo -e "\n${CYAN}======================================================${NC}"
+echo -e "${GREEN}🎉 TUDO PRONTO! AGORA VOCÊ PODE USAR APENAS:${NC}"
+echo -e "   ${YELLOW}multcar att${NC}      -> Atualiza tudo automaticamente"
+echo -e "   ${YELLOW}multcar status${NC}   -> Verifica se o container está rodando"
+echo -e "   ${YELLOW}multcar logs${NC}     -> Acompanha os logs em tempo real"
+echo -e "${CYAN}======================================================${NC}"
+
 echo -e "\n${YELLOW}💡 Próximo Passo para ter HTTPS (Obrigatório para o Bluetooth no Celular):${NC}"
 echo -e "1. Aponte seu domínio/subdomínio para o IP desta VPS."
 echo -e "2. Use o Nginx Proxy Manager, Caddy ou Certbot para gerar o certificado SSL gratuito:"
