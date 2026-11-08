@@ -1,4 +1,4 @@
-const CACHE_NAME = 'multcar-pro-v1.0';
+const CACHE_NAME = 'multcar-pro-v1.1';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -70,4 +70,3 @@ self.addEventListener('fetch', (event) => {
     })
   );
 });
-
