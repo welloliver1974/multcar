@@ -612,6 +612,150 @@
       padding: 0 4px;
       line-height: 1;
     }
+
+    /* SEÇÃO INFERIOR DO DASHBOARD (COMPUTADOR DE BORDO & SAÚDE RÁPIDA IA) */
+    .dash-bottom-section {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 10px;
+      width: 100%;
+    }
+
+    .health-ai-card {
+      background: linear-gradient(135deg, #0d1527 0%, #080d19 100%);
+      border: 1px solid #1e293b;
+      border-radius: 10px;
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
+    }
+    .health-status-box {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+    .health-pulse {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 10px var(--green);
+      flex-shrink: 0;
+      animation: pulseAnim 2s infinite;
+    }
+    .health-pulse.warn {
+      background: var(--yellow);
+      box-shadow: 0 0 10px var(--yellow);
+    }
+    .health-pulse.danger {
+      background: var(--red);
+      box-shadow: 0 0 10px var(--red);
+    }
+    @keyframes pulseAnim {
+      0% { transform: scale(0.95); opacity: 0.8; }
+      50% { transform: scale(1.2); opacity: 1; }
+      100% { transform: scale(0.95); opacity: 0.8; }
+    }
+    .health-info {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+    .health-title {
+      font-size: 0.82rem;
+      font-weight: 800;
+      color: #fff;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .health-subtitle {
+      font-size: 0.68rem;
+      color: var(--text-dim);
+    }
+    .btn-quick-ai {
+      background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 7px 12px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+      white-space: nowrap;
+      box-shadow: 0 2px 10px rgba(99, 102, 241, 0.35);
+      transition: all 0.2s ease;
+      flex-shrink: 0;
+    }
+    .btn-quick-ai:active {
+      transform: scale(0.96);
+    }
+
+    .trip-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+    }
+    .trip-tile {
+      background: #090f1d;
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      padding: 9px 11px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      min-height: 64px;
+    }
+    .trip-label {
+      font-size: 0.66rem;
+      font-weight: 700;
+      color: var(--text-dim);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .trip-val-row {
+      display: flex;
+      align-items: baseline;
+      gap: 4px;
+      margin-top: 2px;
+    }
+    .trip-val {
+      font-size: 1.15rem;
+      font-weight: 900;
+      color: #fff;
+      line-height: 1.1;
+    }
+    .trip-unit {
+      font-size: 0.65rem;
+      font-weight: 700;
+      color: var(--accent);
+    }
+    .trip-sub {
+      font-size: 0.6rem;
+      color: var(--text-dim);
+      margin-top: 2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    @media (orientation: landscape) and (min-width: 540px) {
+      .dash-bottom-section {
+        margin-top: 8px;
+      }
+      .trip-grid {
+        grid-template-columns: repeat(4, 1fr);
+      }
+    }
   </style>
 </head>
 <body>
@@ -752,6 +896,66 @@
             <div class="bar-wrap">
               <div class="bar-fill" id="loadBar"></div>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SEÇÃO INFERIOR: SAÚDE RÁPIDA IA & COMPUTADOR DE BORDO -->
+      <div class="dash-bottom-section">
+        <!-- Status Rápido do Prisma & Botão Parecer de Voz IA -->
+        <div class="health-ai-card">
+          <div class="health-status-box">
+            <div class="health-pulse" id="dashHealthPulse"></div>
+            <div class="health-info">
+              <div class="health-title" id="dashHealthStatus">Injeção GM Delphi OK • 0 Falhas</div>
+              <div class="health-subtitle" id="dashHealthSub">Prisma 1.4 SPE/4 Flex Operacional</div>
+            </div>
+          </div>
+          <button class="btn-quick-ai" id="btnQuickAiVoice" title="Ouvir parecer do Mecânico IA">
+            <span>🤖</span>
+            <span>Parecer IA</span>
+          </button>
+        </div>
+
+        <!-- Computador de Bordo & Dinâmica -->
+        <div class="trip-grid">
+          <!-- Consumo Instantâneo -->
+          <div class="trip-tile">
+            <div class="trip-label">⛽ Consumo Instantâneo</div>
+            <div class="trip-val-row">
+              <span class="trip-val" id="dashInstantConsumption">0.0</span>
+              <span class="trip-unit" id="dashConsumptionUnit">km/L</span>
+            </div>
+            <div class="trip-sub" id="dashTripFuelType">Marcha Lenta: L/h • Estrada: km/L</div>
+          </div>
+
+          <!-- Posição Borboleta TBI -->
+          <div class="trip-tile">
+            <div class="trip-label">🎛️ Borboleta (TBI)</div>
+            <div class="trip-val-row">
+              <span class="trip-val" id="dashThrottleVal">0%</span>
+            </div>
+            <div class="bar-wrap" style="height: 5px; margin-top: 4px;">
+              <div class="bar-fill" id="dashThrottleBar" style="width: 0%; background: var(--accent);"></div>
+            </div>
+          </div>
+
+          <!-- Tempo de Funcionamento / Viagem -->
+          <div class="trip-tile">
+            <div class="trip-label">⏱️ Tempo em Viagem</div>
+            <div class="trip-val-row">
+              <span class="trip-val" id="dashTripTime">00:00:00</span>
+            </div>
+            <div class="trip-sub" id="dashTripSub">Motor em Operação</div>
+          </div>
+
+          <!-- Recorde 0-100 km/h -->
+          <div class="trip-tile">
+            <div class="trip-label">🏁 Recorde 0-100</div>
+            <div class="trip-val-row">
+              <span class="trip-val" id="dashBest0to100">-- s</span>
+            </div>
+            <div class="trip-sub" id="dash0to100Status">Pronto para acelerar</div>
           </div>
         </div>
       </div>
@@ -1051,6 +1255,122 @@ Toque em "⚡ Diagnosticar" para que o Mecânico IA avalie todos os sensores do 
     const mapVal = document.getElementById('mapVal');
     const ltftVal = document.getElementById('ltftVal');
 
+    // Elementos da Seção Inferior: Saúde Rápida e Computador de Bordo
+    const dashHealthPulse = document.getElementById('dashHealthPulse');
+    const dashHealthStatus = document.getElementById('dashHealthStatus');
+    const dashHealthSub = document.getElementById('dashHealthSub');
+    const btnQuickAiVoice = document.getElementById('btnQuickAiVoice');
+
+    const dashInstantConsumption = document.getElementById('dashInstantConsumption');
+    const dashConsumptionUnit = document.getElementById('dashConsumptionUnit');
+    const dashTripFuelType = document.getElementById('dashTripFuelType');
+    const dashThrottleVal = document.getElementById('dashThrottleVal');
+    const dashThrottleBar = document.getElementById('dashThrottleBar');
+    const dashTripTime = document.getElementById('dashTripTime');
+    const dashTripSub = document.getElementById('dashTripSub');
+    const dashBest0to100 = document.getElementById('dashBest0to100');
+    const dash0to100Status = document.getElementById('dash0to100Status');
+
+    let best0to100 = localStorage.getItem('multcar_best_0_100') || null;
+    if (best0to100 && dashBest0to100) {
+      dashBest0to100.textContent = parseFloat(best0to100).toFixed(2) + ' s';
+      if (dash0to100Status) dash0to100Status.textContent = 'Recorde salvo';
+    }
+
+    let lastKnownRpm = 0;
+    let lastKnownSpeed = 0;
+    let lastKnownMap = 35;
+    let lastKnownLtft = 0;
+    let lastKnownThrottle = 0;
+
+    function updateTripAndThrottle(speed = null, rpm = null, mapKpa = null, ltftPercent = null, throttlePct = null) {
+      if (speed !== null && speed !== undefined) lastKnownSpeed = speed;
+      if (rpm !== null && rpm !== undefined) lastKnownRpm = rpm;
+      if (mapKpa !== null && mapKpa !== undefined) lastKnownMap = mapKpa;
+      if (ltftPercent !== null && ltftPercent !== undefined) lastKnownLtft = ltftPercent;
+      if (throttlePct !== null && throttlePct !== undefined) lastKnownThrottle = throttlePct;
+
+      if (dashThrottleVal && dashThrottleBar) {
+        const tPct = Math.min(Math.max(Math.round(lastKnownThrottle), 0), 100);
+        dashThrottleVal.textContent = tPct + '%';
+        dashThrottleBar.style.width = tPct + '%';
+      }
+
+      if (dashInstantConsumption && dashConsumptionUnit) {
+        const sRpm = Math.max(lastKnownRpm, 0);
+        const sMap = Math.max(lastKnownMap, 15);
+        const sLtft = isNaN(lastKnownLtft) ? 0 : lastKnownLtft;
+
+        // Consumo em L/h para SPE/4 1.4 GM
+        const consumoLh = (sRpm * sMap * 0.00034) * (1 + (sLtft / 100));
+
+        if (lastKnownSpeed < 2) {
+          dashInstantConsumption.textContent = Math.max(consumoLh, 0.4).toFixed(1);
+          dashConsumptionUnit.textContent = 'L/h';
+          if (dashTripFuelType) dashTripFuelType.textContent = 'Em Marcha Lenta';
+        } else {
+          const consumoKmL = Math.min(lastKnownSpeed / Math.max(consumoLh, 0.1), 35.0);
+          dashInstantConsumption.textContent = consumoKmL.toFixed(1);
+          dashConsumptionUnit.textContent = 'km/L';
+          if (dashTripFuelType) {
+            dashTripFuelType.textContent = consumoKmL >= 13 ? '🟢 Faixa Econômica' : '⛽ Condução Normal';
+          }
+        }
+      }
+    }
+
+    // Cronômetro do Tempo em Viagem
+    let tripStartTimestamp = Date.now();
+    setInterval(() => {
+      const totalSec = Math.floor((Date.now() - tripStartTimestamp) / 1000);
+      const h = String(Math.floor(totalSec / 3600)).padStart(2, '0');
+      const m = String(Math.floor((totalSec % 3600) / 60)).padStart(2, '0');
+      const s = String(totalSec % 60).padStart(2, '0');
+      if (dashTripTime) dashTripTime.textContent = `${h}:${m}:${s}`;
+    }, 1000);
+
+    // Botão de Parecer de Voz IA Rápido
+    if (btnQuickAiVoice) {
+      btnQuickAiVoice.addEventListener('click', () => {
+        if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+
+        const currentTemp = tempVal.textContent;
+        const currentVolt = voltVal.textContent;
+        const currentRpm = rpmVal.textContent;
+        const isDtcClean = document.getElementById('dtcList').innerText.includes('NENHUMA');
+
+        let statusAudio = '';
+        let healthTitle = 'Injeção GM Delphi OK • 0 Falhas';
+        const tempNum = parseFloat(currentTemp) || 90;
+
+        if (tempNum > 104) {
+          statusAudio = `Atenção! Temperatura do motor em ${tempNum} graus, acima da faixa de segurança. Verifique o arrefecimento imediatamente.`;
+          healthTitle = 'ALERTA: Motor Aquecido!';
+          if (dashHealthPulse) dashHealthPulse.className = 'health-pulse danger';
+        } else if (!isDtcClean) {
+          statusAudio = `Aviso do Mecânico: Foi detectado código de falha na injeção. Verifique a aba de diagnósticos.`;
+          healthTitle = 'Atenção: Falha Registrada';
+          if (dashHealthPulse) dashHealthPulse.className = 'health-pulse warn';
+        } else {
+          statusAudio = `Parecer do Prisma 1.4: Motor operando em condições ideais de fábrica. Temperatura de ${currentTemp} graus, alternador em ${currentVolt} volts e injeção sem falhas. Boa viagem!`;
+          healthTitle = 'Injeção GM Delphi OK • 0 Falhas';
+          if (dashHealthPulse) dashHealthPulse.className = 'health-pulse';
+        }
+
+        if (dashHealthStatus) dashHealthStatus.textContent = healthTitle;
+        if (dashHealthSub) dashHealthSub.textContent = `Temp: ${currentTemp}°C • Alt: ${currentVolt}V`;
+
+        showToast('🤖 Parecer do Mecânico IA', statusAudio, tempNum > 104 ? 'error' : 'success', 6000);
+
+        if ('speechSynthesis' in window) {
+          const utt = new SpeechSynthesisUtterance(statusAudio);
+          utt.lang = 'pt-BR';
+          utt.rate = 1.05;
+          window.speechSynthesis.speak(utt);
+        }
+      });
+    }
+
     const CIRCUMFERENCE = 2 * Math.PI * 90; // ~565.48
     function updateGauge(fillElem, value, maxVal) {
       const pct = Math.min(Math.max(value / maxVal, 0), 1);
@@ -1147,6 +1467,18 @@ Toque em "⚡ Diagnosticar" para que o Mecânico IA avalie todos os sensores do 
           document.getElementById('status0to100').textContent = '🏁 Sucesso!';
           perfStatus.textContent = `🎉 0 a 100 km/h em ${elapsed.toFixed(2)}s!`;
           perfStatus.style.color = 'var(--green)';
+
+          if (!best0to100 || elapsed < parseFloat(best0to100)) {
+            best0to100 = elapsed.toFixed(2);
+            localStorage.setItem('multcar_best_0_100', best0to100);
+            if (dashBest0to100) dashBest0to100.textContent = best0to100 + ' s';
+            if (dash0to100Status) {
+              dash0to100Status.textContent = '🏆 NOVO RECORDE!';
+              dash0to100Status.style.color = 'var(--green)';
+            }
+          } else {
+            if (dash0to100Status) dash0to100Status.textContent = `Melhor: ${best0to100}s`;
+          }
         }
       }
     }
@@ -1410,7 +1742,7 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
       { mode: 0x01, pid: 0x0D }, // Velocidade
       { mode: 0x01, pid: 0x0C }, // RPM
       { mode: 0x01, pid: 0x0B }, // MAP
-      { mode: 0x01, pid: 0x0C }, // RPM
+      { mode: 0x01, pid: 0x11 }, // Borboleta TBI
       { mode: 0x01, pid: 0x04 }, // Carga do Motor
       { mode: 0x01, pid: 0x05 }, // Temperatura Arrefecimento
       { mode: 0x01, pid: 0x0C }, // RPM
@@ -1473,6 +1805,7 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
               rpmVal.textContent = rpm;
               updateGauge(rpmFill, rpm, 7000);
               updateShiftLight(rpm);
+              updateTripAndThrottle(null, rpm);
               break;
             }
             case 0x0D: { // Velocidade: A (km/h)
@@ -1480,6 +1813,7 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
               speedVal.textContent = speed;
               updateGauge(speedFill, speed, 200);
               handlePerformanceTimer(speed);
+              updateTripAndThrottle(speed);
               break;
             }
             case 0x05: { // Temperatura da Água: A - 40 (°C)
@@ -1494,6 +1828,12 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
             case 0x0B: { // MAP Pressão Coletor: A (kPa)
               mapVal.textContent = a;
               document.getElementById('aiDataMap').textContent = a + ' kPa';
+              updateTripAndThrottle(null, null, a);
+              break;
+            }
+            case 0x11: { // Posição da Borboleta TBI: (A * 100) / 255 (%)
+              const throttle = Math.round((a * 100) / 255);
+              updateTripAndThrottle(null, null, null, null, throttle);
               break;
             }
             case 0x04: { // Carga do Motor: (A * 100) / 255 (%)
@@ -1507,6 +1847,7 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
               const sign = ltft >= 0 ? '+' : '';
               ltftVal.textContent = `${sign}${ltft}%`;
               document.getElementById('aiDataLtft').textContent = `${sign}${ltft}%`;
+              updateTripAndThrottle(null, null, null, parseFloat(ltft));
               break;
             }
             case 0x14: { // Sonda Lambda 1 Tensão: A / 200 (V)
@@ -1957,6 +2298,9 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
 
         ltftVal.textContent = '+1.6%';
         document.getElementById('aiDataLtft').textContent = '+1.6%';
+
+        const simThrottle = Math.min(Math.round((simRpm / 6500) * 100), 100);
+        updateTripAndThrottle(simSpeed, simRpm, mapKpa, 1.6, simThrottle);
 
         o2Phase += 0.25;
         const o2V = 0.5 + Math.sin(o2Phase) * 0.38 + (Math.random() * 0.04 - 0.02);

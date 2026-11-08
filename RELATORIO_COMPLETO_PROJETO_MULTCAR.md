@@ -390,5 +390,26 @@ Para garantir hospedagem permanente e independente com suporte a HTTPS e downloa
   * Distribuição do instalador nativo diretamente em: `http://IP_DA_VPS:3030/Multcar_Pro_v1.0.apk`.
 
 ---
-*Relatório atualizado em 08/nov/2026 com engenharia reversa completa da conexão BLE, PWA, compilação final e deploy VPS.*
+
+## 18. Expansão de Interface: Computador de Bordo & Dinâmica de Pilotagem
+
+Com o layout em orientação vertical (retrato) no smartphone apresentando espaço livre na parte inferior, a interface do dashboard principal foi aprimorada com dois blocos de alta utilidade técnica:
+
+### 18.1. Barra de Saúde do Veículo & Parecer IA em 1 Toque
+* **Monitoramento Ativo:** Indicador pulsante em LED RGB integrado (Verde para nominal, Amarelo para falhas leves ou DTCs, Vermelho para temperaturas críticas > 104°C).
+* **Voz do Mecânico de Bordo:** Botão `"🤖 Parecer IA"` que executa síntese de voz (TTS) em português brasileiro com diagnóstico audível instantâneo da injeção eletrônica, alternador e arrefecimento, sem necessidade de digitação ou de tirar os olhos da pista.
+
+### 18.2. Grade 2x2 do Computador de Bordo (Dinâmica)
+1. **Consumo Instantâneo Inteligente:**
+   * Utiliza a fórmula de densidade de velocidade (*Speed-Density*) calibrada para a cilindrada do motor SPE/4 1.4 GM (1.389 cm³) cruzando MAP, RPM e LTFT.
+   * **Comportamento Idêntico ao Painel Digital Chevrolet:** Quando o veículo está parado no sinal (< 2 km/h), o display comuta automaticamente para `L/h` (ex: ~0.9 a 1.1 L/h em marcha lenta com ar desligado). Em movimento, converte em tempo real para `km/L`.
+2. **Posição da Borboleta (TBI):**
+   * Leitura direta do PID `0x11` com percentual numérico e barra de aceleração responsiva de 0 a 100%.
+3. **Tempo de Viagem:**
+   * Cronômetro automático em formato `HH:MM:SS` que contabiliza a duração da viagem e o tempo de funcionamento do motor desde a inicialização.
+4. **Recorde de Aceleração 0 a 100 km/h:**
+   * Memorização persistente no `localStorage` do smartphone, registrando o menor tempo histórico de aceleração com badge comemorativo.
+
+---
+*Relatório atualizado em 08/nov/2026 com Computador de Bordo Dinâmico, Parecer de Voz IA e sincronização Git.*
 

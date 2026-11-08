@@ -56,5 +56,8 @@ curl -fsSL https://raw.githubusercontent.com/welloliver1974/multcar/main/deploy.
    - Plugar o AD10 na porta OBD2 do Prisma e ligar a chave (ignição).
    - Abrir o app (seja via APK ou PWA).
    - Tocar em **"📡 Conectar"** e selecionar o **AD10** na janela que abre.
-2. **Validar leitura em tempo real:**
-   - Observar o velocímetro, conta-giros, temperatura da água e tensão da bateria.
+2. **Validar leitura em tempo real & Novos Recursos:**
+   - Observar velocímetro, conta-giros, temperatura da água e tensão da bateria.
+   - No celular em pé: conferir o **Computador de Bordo** (Consumo instantâneo em `L/h` parado ou `km/L` rodando, abertura da borboleta TBI e tempo de viagem).
+   - Testar o botão **"🤖 Parecer IA"** para ouvir o diagnóstico por voz do motor em português.
+   - Se desejar testar aceleração, acelerar de 0 a 100 km/h para gravar o recorde no painel.

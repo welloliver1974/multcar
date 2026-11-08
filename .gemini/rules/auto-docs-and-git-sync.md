@@ -20,3 +20,4 @@ Sempre que qualquer modificação de código, layout, protocolo, correção de b
    - Realizar `git add -A`.
    - Fazer `git commit` com mensagem padronizada no formato Conventional Commits.
    - Fazer `git push origin main` com `BypassSandbox: true` para que o repositório `https://github.com/welloliver1974/multcar.git` esteja sempre atualizado para o deploy na VPS.
+
