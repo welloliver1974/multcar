@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  multcar-pwa:
+    build: .
+    container_name: multcar-app
+    restart: unless-stopped
+    ports:
+      # Mapeia a porta 3030 da VPS para a porta 80 do Nginx
+      # Caso queira rodar direto na 80/443, mude para "80:80"
+      - "3030:80"
+    environment:
+      - NODE_ENV=production
