@@ -1,0 +1,1962 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Multcar Pro — Telemetria e Diagnóstico Chevrolet Prisma 1.4</title>
+  
+  <!-- PWA & Mobile Web App Meta Tags -->
+  <link rel="manifest" href="./manifest.json">
+  <link rel="icon" type="image/png" href="./icon-192.png">
+  <link rel="apple-touch-icon" href="./icon-192.png">
+  <meta name="theme-color" content="#0a0f1d">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Multcar Pro">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="application-name" content="Multcar Pro">
+  <style>
+    :root {
+      --bg: #070b14;
+      --card-bg: #101726;
+      --card-border: #1e293b;
+      --accent: #00d2ff;
+      --accent-glow: rgba(0, 210, 255, 0.35);
+      --green: #10b981;
+      --yellow: #f59e0b;
+      --red: #ef4444;
+      --text: #f3f4f6;
+      --text-dim: #94a3b8;
+      --purple: #a855f7;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      overflow-x: hidden;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* BARRA SUPERIOR COMPACTA E RESPONSIVA */
+    header {
+      background: #0a0f1d;
+      border-bottom: 1px solid var(--card-border);
+      padding: 8px 12px;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      z-index: 50;
+      flex-shrink: 0;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .brand h1 {
+      font-size: 1.05rem;
+      font-weight: 900;
+      letter-spacing: 0.5px;
+      color: #fff;
+      white-space: nowrap;
+    }
+
+    .brand .badge {
+      background: #1e293b;
+      color: var(--accent);
+      font-size: 0.65rem;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .status-badge {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 0.72rem;
+      color: var(--text-dim);
+      background: #0d1527;
+      padding: 4px 8px;
+      border-radius: 6px;
+      border: 1px solid var(--card-border);
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #64748b;
+      transition: all 0.3s;
+    }
+    .dot.connected { background: var(--green); box-shadow: 0 0 6px var(--green); }
+    .dot.connecting { background: var(--yellow); box-shadow: 0 0 6px var(--yellow); }
+
+    .btn {
+      background: var(--accent);
+      color: #070b14;
+      border: none;
+      padding: 6px 10px;
+      border-radius: 6px;
+      font-weight: 700;
+      font-size: 0.75rem;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      white-space: nowrap;
+      transition: transform 0.1s, opacity 0.1s;
+    }
+    .btn:active { transform: scale(0.96); }
+    .btn-secondary {
+      background: #1e293b;
+      color: var(--text);
+      border: 1px solid var(--card-border);
+    }
+    .btn-ai {
+      background: linear-gradient(135deg, #a855f7, #3b82f6);
+      color: #fff;
+    }
+    .btn-danger {
+      background: var(--red);
+      color: #fff;
+    }
+
+    /* BARRA DE NAVEGAÇÃO DE ABAS */
+    .tab-bar {
+      background: #080d1a;
+      border-bottom: 1px solid var(--card-border);
+      padding: 0 8px;
+      display: flex;
+      gap: 4px;
+      overflow-x: auto;
+      scrollbar-width: none;
+      flex-shrink: 0;
+    }
+    .tab-bar::-webkit-scrollbar { display: none; }
+
+    .tab-btn {
+      background: none;
+      border: none;
+      color: var(--text-dim);
+      padding: 8px 10px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      border-bottom: 2.5px solid transparent;
+      white-space: nowrap;
+      transition: color 0.15s, border-color 0.15s;
+    }
+    .tab-btn.active {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+    }
+    .tab-btn.tab-ai {
+      color: #c084fc;
+    }
+    .tab-btn.tab-ai.active {
+      border-bottom-color: #c084fc;
+    }
+
+    /* CORPO PRINCIPAL SCROLLÁVEL */
+    main {
+      flex: 1;
+      padding: 8px;
+      overflow-y: auto;
+      width: 100%;
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    /* SHIFT-LIGHT COMPACTO */
+    .shift-light-bar {
+      display: flex;
+      gap: 4px;
+      padding: 4px 6px;
+      background: #0a0f1d;
+      border-radius: 6px;
+      margin-bottom: 8px;
+      border: 1px solid var(--card-border);
+    }
+    .shift-led {
+      flex: 1;
+      height: 6px;
+      background: #1e293b;
+      border-radius: 2px;
+      transition: background 0.08s;
+    }
+    .shift-led.green-on { background: var(--green); box-shadow: 0 0 6px var(--green); }
+    .shift-led.yellow-on { background: var(--yellow); box-shadow: 0 0 6px var(--yellow); }
+    .shift-led.red-on { background: var(--red); box-shadow: 0 0 8px var(--red); }
+    .shift-flash { animation: shiftBlink 0.15s infinite alternate; }
+
+    @keyframes shiftBlink {
+      from { opacity: 1; }
+      to { opacity: 0.2; }
+    }
+
+    /* ALERTA CRÍTICO */
+    .alert-banner {
+      display: none;
+      background: rgba(239, 68, 68, 0.18);
+      border: 1px solid var(--red);
+      color: #fca5a5;
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      font-weight: 700;
+      margin-bottom: 8px;
+      align-items: center;
+      gap: 8px;
+      animation: alertPulse 1.2s infinite;
+    }
+    .alert-banner.active { display: flex; }
+
+    @keyframes alertPulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.6; }
+    }
+
+    /* =========================================================================
+       LAYOUT RESPONSIVO INTELIGENTE DO DASHBOARD (VERTICAL E HORIZONTAL)
+       ========================================================================= */
+
+    /* PADRÃO CELULAR VERTICAL (PORTRAIT) */
+    .dashboard-layout {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .gauges-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 10px;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      min-width: 0;
+    }
+
+    .card-title {
+      font-size: 0.65rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-dim);
+      font-weight: 800;
+      margin-bottom: 4px;
+      align-self: flex-start;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      width: 100%;
+    }
+
+    /* GAUGES FLUIDOS COM ASPECT-RATIO */
+    .gauge-wrapper {
+      position: relative;
+      width: 100%;
+      max-width: 160px;
+      aspect-ratio: 1 / 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto;
+    }
+
+    .gauge-svg {
+      width: 100%;
+      height: 100%;
+      transform: rotate(-90deg);
+    }
+    .gauge-bg {
+      fill: none;
+      stroke: #1e293b;
+      stroke-width: 14;
+    }
+    .gauge-fill {
+      fill: none;
+      stroke: var(--accent);
+      stroke-width: 14;
+      stroke-dasharray: 565;
+      stroke-dashoffset: 565;
+      stroke-linecap: round;
+      transition: stroke-dashoffset 0.08s linear;
+    }
+
+    .gauge-center {
+      position: absolute;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    .gauge-val {
+      font-size: 1.8rem;
+      font-weight: 900;
+      color: #fff;
+      line-height: 1;
+    }
+    .gauge-unit {
+      font-size: 0.65rem;
+      color: var(--text-dim);
+      font-weight: 700;
+      margin-top: 2px;
+    }
+
+    /* GRADE DE MÉTRICAS CENTRAIS (TILES) */
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 6px;
+    }
+
+    .metric-tile {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      padding: 8px 10px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      min-width: 0;
+    }
+    .metric-header {
+      font-size: 0.68rem;
+      color: var(--text-dim);
+      font-weight: 700;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .metric-body {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      margin-top: 4px;
+    }
+    .metric-big {
+      font-size: 1.25rem;
+      font-weight: 900;
+      color: #fff;
+      line-height: 1;
+    }
+    .metric-sub {
+      font-size: 0.62rem;
+      color: var(--text-dim);
+      font-weight: 600;
+    }
+
+    .bar-wrap {
+      width: 100%;
+      height: 5px;
+      background: #1e293b;
+      border-radius: 3px;
+      overflow: hidden;
+      margin-top: 5px;
+    }
+    .bar-fill {
+      height: 100%;
+      width: 0%;
+      background: var(--accent);
+      transition: width 0.15s ease;
+    }
+
+    /* =========================================================================
+       MODO HORIZONTAL (LANDSCAPE CELULAR & CENTRAL K2401 1024x600)
+       ========================================================================= */
+    @media (orientation: landscape) and (min-width: 540px) {
+      body {
+        height: 100vh;
+        overflow: hidden;
+      }
+      main {
+        overflow-y: auto;
+        height: calc(100vh - 80px);
+        padding: 6px 12px;
+      }
+      .dashboard-layout {
+        display: grid;
+        grid-template-columns: 1fr 1.3fr 1fr;
+        align-items: stretch;
+        gap: 8px;
+        height: 100%;
+      }
+      .gauges-row {
+        display: contents;
+      }
+      .gauge-wrapper {
+        max-width: 140px;
+      }
+      .gauge-val {
+        font-size: 1.6rem;
+      }
+      .metrics-grid {
+        grid-template-columns: repeat(2, 1fr);
+        height: 100%;
+        align-content: stretch;
+      }
+      .metric-tile {
+        padding: 6px 8px;
+      }
+      .metric-big {
+        font-size: 1.15rem;
+      }
+    }
+
+    /* SE TELA FOR GRANDE (K2401 1024x600 ou Tablets) */
+    @media (orientation: landscape) and (min-width: 900px) {
+      .gauge-wrapper {
+        max-width: 190px;
+      }
+      .gauge-val {
+        font-size: 2.2rem;
+      }
+      .metric-big {
+        font-size: 1.4rem;
+      }
+    }
+
+    /* GRID DE MÓDULOS (2 COLUNAS RESPONSIVAS) */
+    .module-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 8px;
+    }
+
+    .stat-card {
+      background: #0b1120;
+      border: 1px solid var(--card-border);
+      padding: 12px;
+      border-radius: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .stat-card .label { font-size: 0.68rem; color: var(--text-dim); text-transform: uppercase; font-weight: 700; }
+    .stat-card .num { font-size: 1.5rem; font-weight: 900; color: #fff; line-height: 1.1; }
+
+    /* OSCILOSCÓPIO */
+    .chart-box {
+      width: 100%;
+      height: 140px;
+      background: #070c18;
+      border-radius: 8px;
+      border: 1px solid var(--card-border);
+      margin-top: 8px;
+      position: relative;
+    }
+    canvas { width: 100%; height: 100%; display: block; }
+
+    /* PAINEL MECÂNICO IA */
+    .ai-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .ai-settings-drawer {
+      background: #0b1120;
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      padding: 12px;
+      display: none;
+    }
+    .ai-settings-drawer.open { display: block; }
+
+    .input-group {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      margin-bottom: 8px;
+    }
+    .input-group label {
+      font-size: 0.7rem;
+      font-weight: 700;
+      color: var(--text-dim);
+    }
+    .input-field {
+      background: #070b14;
+      border: 1px solid var(--card-border);
+      color: #fff;
+      padding: 8px 10px;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      outline: none;
+      width: 100%;
+    }
+    .input-field:focus { border-color: var(--purple); }
+
+    .ai-bubble {
+      background: #0a0f1d;
+      border: 1px solid #1e293b;
+      border-radius: 8px;
+      padding: 12px;
+      font-size: 0.85rem;
+      line-height: 1.5;
+      color: #e2e8f0;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    /* DTC ITEM */
+    .dtc-row {
+      background: #090e1a;
+      border-left: 3px solid var(--red);
+      padding: 10px 12px;
+      border-radius: 0 6px 6px 0;
+      margin-bottom: 6px;
+    }
+    .dtc-row.clean { border-left-color: var(--green); }
+    .dtc-code { font-size: 0.95rem; font-weight: 800; color: #fff; }
+    .dtc-desc { font-size: 0.75rem; color: var(--text-dim); margin-top: 2px; }
+
+    /* MODAL DE STATUS E NOTIFICAÇÃO TOAST VISÍVEL */
+    .toast-popup {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(140px);
+      background: #111827;
+      color: #fff;
+      padding: 14px 18px;
+      border-radius: 12px;
+      border: 1px solid var(--accent);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.85);
+      font-size: 0.82rem;
+      line-height: 1.45;
+      max-width: 92%;
+      width: 400px;
+      z-index: 99999;
+      opacity: 0;
+      transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      pointer-events: none;
+    }
+    .toast-popup.visible {
+      transform: translateX(-50%) translateY(0);
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .toast-popup.error {
+      border-color: var(--red);
+      background: #230b0b;
+    }
+    .toast-popup.success {
+      border-color: var(--green);
+      background: #062217;
+    }
+    .toast-popup.warning {
+      border-color: var(--yellow);
+      background: #261c06;
+    }
+    .toast-header {
+      font-weight: 800;
+      font-size: 0.9rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .toast-close {
+      cursor: pointer;
+      color: var(--text-dim);
+      font-size: 1.2rem;
+      border: none;
+      background: none;
+      padding: 0 4px;
+      line-height: 1;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- CABEÇALHO COMPACTO -->
+  <header>
+    <div class="brand">
+      <h1>🏎️ MULTCAR</h1>
+      <span class="badge">Prisma 1.4</span>
+    </div>
+    <div class="header-actions">
+      <div class="status-badge">
+        <span class="dot" id="connDot"></span>
+        <span id="connText">Off</span>
+      </div>
+      <button class="btn btn-secondary" id="btnInstallPwa" style="display: none;">📲 Instalar</button>
+      <button class="btn btn-secondary" id="btnSimulate">▶ Simular</button>
+      <button class="btn" id="btnConnectBle">📡 Conectar</button>
+    </div>
+  </header>
+
+  <!-- ABAS DE NAVEGAÇÃO HORIZONTAL (ROLAGEM SUAVE) -->
+  <div class="tab-bar">
+    <button class="tab-btn active" data-tab="tabDashboard">📊 Painel</button>
+    <button class="tab-btn tab-ai" data-tab="tabAiMechanic">🤖 Mecânico IA</button>
+    <button class="tab-btn" data-tab="tabPerformance">⏱️ 0 a 100</button>
+    <button class="tab-btn" data-tab="tabBattery">🔋 Bateria</button>
+    <button class="tab-btn" data-tab="tabTrip">⛽ Consumo</button>
+    <button class="tab-btn" data-tab="tabOscilloscope">🔬 Sonda</button>
+    <button class="tab-btn" data-tab="tabDiagnostics">🛠️ Falhas DTC</button>
+    <button class="tab-btn" data-tab="tabVehicleInfo">📋 Veículo</button>
+  </div>
+
+  <main>
+    <!-- Alerta Térmico -->
+    <div class="alert-banner" id="alertBanner">
+      🚨 <strong>PERIGO DE SUPERAQUECIMENTO:</strong> Água > 105°C! Pare com segurança.
+    </div>
+
+    <!-- ==================== ABA 1: PAINEL AO VIVO (RESPONSIVO) ==================== -->
+    <div class="tab-content active" id="tabDashboard">
+      <!-- Régua Shift-Light Compacta -->
+      <div class="shift-light-bar" id="shiftLightBar">
+        <div class="shift-led" id="led1"></div>
+        <div class="shift-led" id="led2"></div>
+        <div class="shift-led" id="led3"></div>
+        <div class="shift-led" id="led4"></div>
+        <div class="shift-led" id="led5"></div>
+        <div class="shift-led" id="led6"></div>
+        <div class="shift-led" id="led7"></div>
+        <div class="shift-led" id="led8"></div>
+        <div class="shift-led" id="led9"></div>
+        <div class="shift-led" id="led10"></div>
+      </div>
+
+      <div class="dashboard-layout">
+        <!-- Mostradores: Linha dupla no vertical / Laterais no horizontal -->
+        <div class="gauges-row">
+          <!-- RPM -->
+          <div class="card">
+            <div class="card-title">RPM (Giro)</div>
+            <div class="gauge-wrapper">
+              <svg class="gauge-svg" viewBox="0 0 200 200">
+                <circle class="gauge-bg" cx="100" cy="100" r="90" />
+                <circle class="gauge-fill" id="rpmFill" cx="100" cy="100" r="90" />
+              </svg>
+              <div class="gauge-center">
+                <div class="gauge-val" id="rpmVal">0</div>
+                <div class="gauge-unit">RPM</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Velocidade Real -->
+          <div class="card">
+            <div class="card-title">Velocidade</div>
+            <div class="gauge-wrapper">
+              <svg class="gauge-svg" viewBox="0 0 200 200">
+                <circle class="gauge-bg" cx="100" cy="100" r="90" />
+                <circle class="gauge-fill" id="speedFill" cx="100" cy="100" r="90" style="stroke: var(--green);" />
+              </svg>
+              <div class="gauge-center">
+                <div class="gauge-val" id="speedVal">0</div>
+                <div class="gauge-unit">km/h</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Métricas Centrais em Tiles Compactos -->
+        <div class="metrics-grid">
+          <!-- Temp. Água -->
+          <div class="metric-tile">
+            <div class="metric-header">🌡️ Arrefecimento</div>
+            <div class="metric-body">
+              <span class="metric-big" id="tempVal">--</span>
+              <span class="metric-sub">°C</span>
+            </div>
+            <div class="metric-sub" id="tempStatus">Ideal: 88-98°C</div>
+          </div>
+
+          <!-- Tensão Bateria -->
+          <div class="metric-tile">
+            <div class="metric-header">⚡ Alternador/Bateria</div>
+            <div class="metric-body">
+              <span class="metric-big" id="voltVal">--</span>
+              <span class="metric-sub">V</span>
+            </div>
+            <div class="metric-sub" id="battStatus">Aguardando...</div>
+          </div>
+
+          <!-- Pressão Coletor (MAP) -->
+          <div class="metric-tile">
+            <div class="metric-header">🫁 Vácuo MAP</div>
+            <div class="metric-body">
+              <span class="metric-big" id="mapVal">--</span>
+              <span class="metric-sub">kPa</span>
+            </div>
+            <div class="metric-sub">Pressão Admissão</div>
+          </div>
+
+          <!-- Adaptação Flex (LTFT) -->
+          <div class="metric-tile">
+            <div class="metric-header">⛽ Mistura Flex (LTFT)</div>
+            <div class="metric-body">
+              <span class="metric-big" id="ltftVal">0.0%</span>
+              <span class="metric-sub">Trim</span>
+            </div>
+            <div class="metric-sub">Adaptação Combustível</div>
+          </div>
+
+          <!-- Carga do Motor (Ocupa largura total na grade de tiles) -->
+          <div class="metric-tile" style="grid-column: 1 / -1;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <span class="metric-header">Carga do Motor</span>
+              <span class="metric-big" style="font-size: 0.95rem;" id="loadVal">0%</span>
+            </div>
+            <div class="bar-wrap">
+              <div class="bar-fill" id="loadBar"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== ABA 2: MECÂNICO IA MULTI-PROVEDOR ==================== -->
+    <div class="tab-content" id="tabAiMechanic">
+      <div class="card ai-panel">
+        <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; flex-wrap: wrap; gap: 6px;">
+          <div>
+            <h2 style="font-size: 1rem; color: #fff;">🤖 Mecânico de Bordo IA</h2>
+            <p style="font-size: 0.72rem; color: var(--text-dim);">Análise preditiva do Prisma 1.4 SPE/4 Flex</p>
+          </div>
+          <div style="display: flex; gap: 6px;">
+            <button class="btn btn-secondary" id="btnToggleAiSettings">⚙️ Provedores</button>
+            <button class="btn btn-ai" id="btnRunAiDiagnosis">⚡ Diagnosticar</button>
+          </div>
+        </div>
+
+        <!-- Painel de Configurações de IA -->
+        <div class="ai-settings-drawer" id="aiSettingsDrawer">
+          <div class="input-group">
+            <label>Provedor de IA:</label>
+            <select class="input-field" id="aiProviderSelect">
+              <option value="groq">⚡ Groq (Llama 3.3 70B - Grátis e Ultrarrápido)</option>
+              <option value="gemini">🧠 Google Gemini 2.0 Flash (Grátis)</option>
+              <option value="openrouter">🌐 OpenRouter (Modelos Gratuitos)</option>
+              <option value="nvidia">🟢 NVIDIA NIM</option>
+              <option value="custom">⚙️ Servidor Próprio / Ollama</option>
+            </select>
+          </div>
+
+          <div class="input-group">
+            <label>Chave de API (Salva localmente):</label>
+            <input type="password" class="input-field" id="aiApiKeyInput" placeholder="Cole sua chave aqui">
+          </div>
+
+          <div class="input-group">
+            <label>ID do Modelo:</label>
+            <input type="text" class="input-field" id="aiModelInput" value="llama-3.3-70b-versatile">
+          </div>
+
+          <div class="input-group">
+            <label>URL Base da API (Endpoint):</label>
+            <input type="text" class="input-field" id="aiEndpointInput" value="https://api.groq.com/openai/v1/chat/completions">
+          </div>
+
+          <button class="btn btn-secondary" id="btnSaveAiSettings" style="width: 100%; justify-content: center; margin-top: 4px;">Salvar Preferências</button>
+        </div>
+
+        <!-- Resumo dos Sensores Atuais -->
+        <div style="background: #080d1a; border: 1px solid var(--card-border); border-radius: 6px; padding: 6px 10px; font-size: 0.72rem; display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; width: 100%;">
+          <span>Água: <strong id="aiDataTemp">-- °C</strong></span>
+          <span>Bateria: <strong id="aiDataVolt">-- V</strong></span>
+          <span>MAP: <strong id="aiDataMap">-- kPa</strong></span>
+          <span>LTFT: <strong id="aiDataLtft">-- %</strong></span>
+        </div>
+
+        <!-- Balão de Resposta da IA -->
+        <div style="width: 100%;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <span style="font-size: 0.7rem; color: #c084fc; font-weight: 700;" id="aiActiveBadge">⚡ Groq • Llama 3.3 70B</span>
+            <button class="btn btn-secondary" id="btnSpeakAiResponse" style="font-size: 0.7rem; padding: 3px 8px;">🔊 Falar no Carro</button>
+          </div>
+          <div class="ai-bubble" id="aiResponseText">
+Toque em "⚡ Diagnosticar" para que o Mecânico IA avalie todos os sensores do seu Prisma LTZ em tempo real!
+          </div>
+        </div>
+
+        <!-- Chat Livre -->
+        <div style="display: flex; gap: 6px; width: 100%;">
+          <input type="text" class="input-field" id="aiQuestionInput" placeholder="Faça uma pergunta ao mecânico...">
+          <button class="btn btn-ai" id="btnSendAiQuestion">Enviar</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== ABA 3: 0 A 100 KM/H ==================== -->
+    <div class="tab-content" id="tabPerformance">
+      <div class="card" style="align-items: stretch;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+          <h2 style="font-size: 0.95rem; color: #fff;">⏱️ Arrancada 0 a 100 km/h</h2>
+          <button class="btn btn-secondary" id="btnResetTimer">Zerar</button>
+        </div>
+        <div class="module-grid">
+          <div class="stat-card" style="border-color: var(--accent);">
+            <div class="label">0 a 60 km/h</div>
+            <div class="num" id="time0to60" style="color: var(--accent);">-- s</div>
+            <div style="font-size: 0.65rem; color: var(--text-dim);" id="status0to60">Aguardando largada...</div>
+          </div>
+          <div class="stat-card" style="border-color: var(--green);">
+            <div class="label">0 a 100 km/h</div>
+            <div class="num" id="time0to100" style="color: var(--green);">-- s</div>
+            <div style="font-size: 0.65rem; color: var(--text-dim);" id="status0to100">Aguardando largada...</div>
+          </div>
+          <div class="stat-card">
+            <div class="label">200m (Velocidade)</div>
+            <div class="num" id="trapSpeed200m">-- km/h</div>
+            <div style="font-size: 0.65rem; color: var(--text-dim);">Tempo: <span id="time200m">-- s</span></div>
+          </div>
+          <div class="stat-card">
+            <div class="label">400m (1/4 Milha)</div>
+            <div class="num" id="trapSpeed400m">-- km/h</div>
+            <div style="font-size: 0.65rem; color: var(--text-dim);">Tempo: <span id="time400m">-- s</span></div>
+          </div>
+        </div>
+        <div style="font-size: 0.75rem; color: var(--yellow); margin-top: 8px; font-weight: 700;" id="perfStatus">
+          Pare o carro no sinal (0 km/h) e pise fundo!
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== ABA 4: BATERIA ==================== -->
+    <div class="tab-content" id="tabBattery">
+      <div class="card" style="align-items: stretch;">
+        <h2 style="font-size: 0.95rem; color: #fff; margin-bottom: 8px;">🔋 Teste de Partida (Cranking Health)</h2>
+        <div class="module-grid">
+          <div class="stat-card">
+            <div class="label">Tensão em Repouso</div>
+            <div class="num" id="restVoltage">12.50 V</div>
+            <div style="font-size: 0.65rem; color: var(--green);">Faixa ideal: 12.4V a 12.8V</div>
+          </div>
+          <div class="stat-card">
+            <div class="label">Queda na Partida</div>
+            <div class="num" id="crankVoltage" style="color: var(--yellow);">10.60 V</div>
+            <div style="font-size: 0.65rem; color: var(--green);">Limite seguro: > 9.5V</div>
+          </div>
+        </div>
+        <div style="background: rgba(16, 185, 129, 0.1); border: 1px solid var(--green); border-radius: 6px; padding: 10px; margin-top: 8px; font-size: 0.8rem;" id="batteryDiagnostic">
+          ✅ Bateria saudável e alternador com carregamento normal.
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== ABA 5: CONSUMO ==================== -->
+    <div class="tab-content" id="tabTrip">
+      <div class="card" style="align-items: stretch;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+          <h2 style="font-size: 0.95rem; color: #fff;">⛽ Computador de Bordo</h2>
+          <div style="display: flex; align-items: center; gap: 4px;">
+            <span style="font-size: 0.68rem; color: var(--text-dim);">R$/L:</span>
+            <input type="number" id="fuelPrice" value="5.89" step="0.1" style="width: 55px; background: #070b14; border: 1px solid var(--card-border); color: #fff; padding: 2px 4px; border-radius: 4px; font-size: 0.75rem;">
+          </div>
+        </div>
+        <div class="module-grid">
+          <div class="stat-card">
+            <div class="label">Consumo Instantâneo</div>
+            <div class="num" id="instantKml" style="color: var(--accent);">12.4 km/L</div>
+            <div style="font-size: 0.65rem; color: var(--text-dim);">Parado: 0.9 L/h</div>
+          </div>
+          <div class="stat-card">
+            <div class="label">Consumo Médio</div>
+            <div class="num" id="avgKml" style="color: var(--green);">11.8 km/L</div>
+            <div style="font-size: 0.65rem; color: var(--text-dim);">Viagem: 18.4 km</div>
+          </div>
+          <div class="stat-card">
+            <div class="label">Custo da Viagem</div>
+            <div class="num" id="tripCostReais" style="color: var(--yellow);">R$ 9,18</div>
+            <div style="font-size: 0.65rem; color: var(--text-dim);">Gasto: 1.56 L</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== ABA 6: OSCILOSCÓPIO ==================== -->
+    <div class="tab-content" id="tabOscilloscope">
+      <div class="card" style="align-items: stretch;">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <h2 style="font-size: 0.95rem; color: #fff;">🔬 Sonda Lambda 1 (Pré-Cat)</h2>
+          <span style="font-size: 0.95rem; font-weight: 800; color: var(--accent);" id="o2VoltageText">0.65 V</span>
+        </div>
+        <div class="chart-box">
+          <canvas id="o2Canvas"></canvas>
+        </div>
+        <div style="display: flex; justify-content: space-between; font-size: 0.65rem; color: var(--text-dim); margin-top: 4px;">
+          <span>0.1V (Pobre)</span>
+          <span style="color: var(--green);">0.45V (Estequiométrica)</span>
+          <span>0.9V (Rico)</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== ABA 7: FALHAS DTC ==================== -->
+    <div class="tab-content" id="tabDiagnostics">
+      <div class="card" style="align-items: stretch;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+          <h2 style="font-size: 0.95rem; color: #fff;">🛠️ Scanner de Falhas</h2>
+          <div style="display: flex; gap: 4px;">
+            <button class="btn btn-secondary" id="btnScanDtc">🔍 Varrer</button>
+            <button class="btn btn-danger" id="btnClearDtc">🗑️ Apagar</button>
+          </div>
+        </div>
+        <div id="dtcList">
+          <div class="dtc-row clean">
+            <div class="dtc-code" style="color: var(--green);">NENHUMA FALHA ATIVA</div>
+            <div class="dtc-desc">Injeção eletrônica Delphi GM sem avarias registradas.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== ABA 8: VEÍCULO ==================== -->
+    <div class="tab-content" id="tabVehicleInfo">
+      <div class="card" style="align-items: stretch;">
+        <h2 style="font-size: 0.95rem; color: #fff; margin-bottom: 8px;">📋 Identificação da ECU (Modo 09)</h2>
+        <div class="module-grid">
+          <div class="stat-card">
+            <div class="label">Chassi Gravado (VIN)</div>
+            <div class="num" style="font-size: 0.95rem; font-family: monospace; color: var(--accent);">9BGKS69G0FG123456</div>
+          </div>
+          <div class="stat-card">
+            <div class="label">Calibração GM (CALID)</div>
+            <div class="num" style="font-size: 0.95rem; font-family: monospace; color: var(--green);">12658932AA</div>
+          </div>
+          <div class="stat-card">
+            <div class="label">Barramento Físico</div>
+            <div class="num" style="font-size: 0.95rem; color: #fff;">CAN 11b / 500k</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- TOAST / MODAL DE AVISO EM TEMPO REAL (NUNCA FALHA SILENCIOSAMENTE) -->
+  <div id="toastPopup" class="toast-popup">
+    <div class="toast-header">
+      <span id="toastTitle">🛰️ Multcar Status</span>
+      <button class="toast-close" id="btnToastClose">✕</button>
+    </div>
+    <div id="toastMessage">Iniciando...</div>
+  </div>
+
+  <script src="capacitor.js"></script>
+  <script src="bluetooth-le.js"></script>
+
+  <script>
+    // Sistema de Notificação Visual Toast
+    function showToast(title, message, type = 'info', durationMs = 5000) {
+      const toast = document.getElementById('toastPopup');
+      const toastTitle = document.getElementById('toastTitle');
+      const toastMsg = document.getElementById('toastMessage');
+      if (!toast) return;
+
+      toast.className = `toast-popup visible ${type}`;
+      toastTitle.innerHTML = title;
+      toastMsg.innerHTML = message;
+
+      if (window.toastTimer) clearTimeout(window.toastTimer);
+      if (durationMs > 0) {
+        window.toastTimer = setTimeout(() => {
+          toast.classList.remove('visible');
+        }, durationMs);
+      }
+    }
+
+    function closeToast() {
+      const toast = document.getElementById('toastPopup');
+      if (toast) toast.classList.remove('visible');
+    }
+
+    const btnToastClose = document.getElementById('btnToastClose');
+    if (btnToastClose) btnToastClose.addEventListener('click', closeToast);
+    // Gerenciador de Abas
+    const tabButtons = document.querySelectorAll('.tab-btn');
+    const tabContents = document.querySelectorAll('.tab-content');
+
+    tabButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        tabButtons.forEach(b => b.classList.remove('active'));
+        tabContents.forEach(c => c.classList.remove('active'));
+
+        btn.classList.add('active');
+        document.getElementById(btn.getAttribute('data-tab')).classList.add('active');
+        if (btn.getAttribute('data-tab') === 'tabOscilloscope') {
+          setTimeout(resizeCanvas, 50);
+        }
+      });
+    });
+
+    // Elementos da Interface
+    const connDot = document.getElementById('connDot');
+    const connText = document.getElementById('connText');
+    const btnSimulate = document.getElementById('btnSimulate');
+    const btnConnectBle = document.getElementById('btnConnectBle');
+    const alertBanner = document.getElementById('alertBanner');
+
+    const rpmVal = document.getElementById('rpmVal');
+    const rpmFill = document.getElementById('rpmFill');
+    const speedVal = document.getElementById('speedVal');
+    const speedFill = document.getElementById('speedFill');
+    const tempVal = document.getElementById('tempVal');
+    const voltVal = document.getElementById('voltVal');
+    const battStatus = document.getElementById('battStatus');
+    const loadVal = document.getElementById('loadVal');
+    const loadBar = document.getElementById('loadBar');
+    const mapVal = document.getElementById('mapVal');
+    const ltftVal = document.getElementById('ltftVal');
+
+    const CIRCUMFERENCE = 2 * Math.PI * 90; // ~565.48
+    function updateGauge(fillElem, value, maxVal) {
+      const pct = Math.min(Math.max(value / maxVal, 0), 1);
+      fillElem.style.strokeDashoffset = CIRCUMFERENCE * (1 - pct);
+    }
+
+    function setTemperature(temp) {
+      tempVal.textContent = temp;
+      document.getElementById('aiDataTemp').textContent = temp + ' °C';
+      if (temp < 80) tempVal.style.color = '#38bdf8';
+      else if (temp <= 98) tempVal.style.color = 'var(--green)';
+      else if (temp <= 104) tempVal.style.color = 'var(--yellow)';
+      else {
+        tempVal.style.color = 'var(--red)';
+        alertBanner.classList.add('active');
+      }
+      if (temp <= 104) alertBanner.classList.remove('active');
+    }
+
+    function setVoltage(volt) {
+      voltVal.textContent = volt.toFixed(2);
+      document.getElementById('aiDataVolt').textContent = volt.toFixed(2) + ' V';
+      if (volt < 12.0) {
+        battStatus.textContent = 'Bateria Baixa (< 12V)';
+        battStatus.style.color = 'var(--red)';
+      } else if (volt >= 13.5 && volt <= 14.8) {
+        battStatus.textContent = 'Alternador OK';
+        battStatus.style.color = 'var(--green)';
+      } else {
+        battStatus.textContent = 'Motor Desligado';
+        battStatus.style.color = 'var(--text-dim)';
+      }
+    }
+
+    // Shift Light LEDs
+    const leds = [
+      document.getElementById('led1'), document.getElementById('led2'),
+      document.getElementById('led3'), document.getElementById('led4'),
+      document.getElementById('led5'), document.getElementById('led6'),
+      document.getElementById('led7'), document.getElementById('led8'),
+      document.getElementById('led9'), document.getElementById('led10')
+    ];
+
+    function updateShiftLight(rpm) {
+      leds.forEach(led => led.className = 'shift-led');
+      if (rpm >= 2500) leds[0].classList.add('green-on');
+      if (rpm >= 3000) leds[1].classList.add('green-on');
+      if (rpm >= 3500) leds[2].classList.add('green-on');
+      if (rpm >= 4000) leds[3].classList.add('green-on');
+      if (rpm >= 4500) leds[4].classList.add('yellow-on');
+      if (rpm >= 5000) leds[5].classList.add('yellow-on');
+      if (rpm >= 5400) leds[6].classList.add('yellow-on');
+      if (rpm >= 5800) leds[7].classList.add('red-on');
+      if (rpm >= 6000) leds[8].classList.add('red-on');
+      if (rpm >= 6150) {
+        leds[9].classList.add('red-on');
+        document.getElementById('shiftLightBar').classList.add('shift-flash');
+      } else {
+        document.getElementById('shiftLightBar').classList.remove('shift-flash');
+      }
+    }
+
+    // Cronômetro 0 a 100
+    let timerRunning = false;
+    let timerStartTime = 0;
+    let reached60 = false;
+    let reached100 = false;
+    const time0to60 = document.getElementById('time0to60');
+    const time0to100 = document.getElementById('time0to100');
+    const perfStatus = document.getElementById('perfStatus');
+
+    function handlePerformanceTimer(speed) {
+      if (speed === 0 && !timerRunning) {
+        perfStatus.textContent = 'Pare o carro no sinal (0 km/h) e pise fundo!';
+        perfStatus.style.color = 'var(--yellow)';
+      } else if (speed > 1 && !timerRunning && !reached100) {
+        timerRunning = true;
+        timerStartTime = performance.now();
+        perfStatus.textContent = '⏱️ ACELERANDO! Cronometrando...';
+        perfStatus.style.color = 'var(--accent)';
+      }
+
+      if (timerRunning) {
+        const elapsed = (performance.now() - timerStartTime) / 1000;
+        if (speed >= 60 && !reached60) {
+          reached60 = true;
+          time0to60.textContent = elapsed.toFixed(2) + ' s';
+          document.getElementById('status0to60').textContent = '✅ Concluído!';
+        }
+        if (speed >= 100 && !reached100) {
+          reached100 = true;
+          timerRunning = false;
+          time0to100.textContent = elapsed.toFixed(2) + ' s';
+          document.getElementById('status0to100').textContent = '🏁 Sucesso!';
+          perfStatus.textContent = `🎉 0 a 100 km/h em ${elapsed.toFixed(2)}s!`;
+          perfStatus.style.color = 'var(--green)';
+        }
+      }
+    }
+
+    document.getElementById('btnResetTimer').addEventListener('click', () => {
+      timerRunning = false;
+      reached60 = false;
+      reached100 = false;
+      time0to60.textContent = '-- s';
+      time0to100.textContent = '-- s';
+      document.getElementById('status0to60').textContent = 'Aguardando largada...';
+      document.getElementById('status0to100').textContent = 'Aguardando largada...';
+      perfStatus.textContent = 'Pronto para nova largada!';
+    });
+
+    // Osciloscópio
+    const o2Canvas = document.getElementById('o2Canvas');
+    const o2Ctx = o2Canvas.getContext('2d');
+    const o2VoltageText = document.getElementById('o2VoltageText');
+    let o2History = new Array(80).fill(0.45);
+
+    function resizeCanvas() {
+      if (!o2Canvas.parentElement) return;
+      o2Canvas.width = o2Canvas.parentElement.clientWidth;
+      o2Canvas.height = o2Canvas.parentElement.clientHeight;
+    }
+    window.addEventListener('resize', resizeCanvas);
+
+    function drawO2Waveform(newVal) {
+      o2History.push(newVal);
+      o2History.shift();
+
+      const w = o2Canvas.width;
+      const h = o2Canvas.height;
+      o2Ctx.clearRect(0, 0, w, h);
+
+      o2Ctx.strokeStyle = '#1e293b';
+      o2Ctx.lineWidth = 1;
+      o2Ctx.beginPath();
+      o2Ctx.moveTo(0, h / 2);
+      o2Ctx.lineTo(w, h / 2);
+      o2Ctx.stroke();
+
+      o2Ctx.strokeStyle = '#00d2ff';
+      o2Ctx.lineWidth = 2;
+      o2Ctx.beginPath();
+
+      const step = w / (o2History.length - 1);
+      for (let i = 0; i < o2History.length; i++) {
+        const val = o2History[i];
+        const y = h - (val / 1.0) * h;
+        if (i === 0) o2Ctx.moveTo(0, y);
+        else o2Ctx.lineTo(i * step, y);
+      }
+      o2Ctx.stroke();
+    }
+
+    // =========================================================================
+    // MECÂNICO IA MULTI-PROVEDOR
+    // =========================================================================
+    const aiProviderSelect = document.getElementById('aiProviderSelect');
+    const aiModelInput = document.getElementById('aiModelInput');
+    const aiApiKeyInput = document.getElementById('aiApiKeyInput');
+    const aiEndpointInput = document.getElementById('aiEndpointInput');
+    const aiSettingsDrawer = document.getElementById('aiSettingsDrawer');
+    const btnToggleAiSettings = document.getElementById('btnToggleAiSettings');
+    const btnSaveAiSettings = document.getElementById('btnSaveAiSettings');
+    const btnRunAiDiagnosis = document.getElementById('btnRunAiDiagnosis');
+    const aiResponseText = document.getElementById('aiResponseText');
+    const aiActiveBadge = document.getElementById('aiActiveBadge');
+
+    const PROVIDER_DEFAULTS = {
+      groq: { model: 'llama-3.3-70b-versatile', endpoint: 'https://api.groq.com/openai/v1/chat/completions', badge: '⚡ Groq • Llama 3.3 70B' },
+      gemini: { model: 'gemini-2.0-flash', endpoint: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', badge: '🧠 Google Gemini 2.0 Flash' },
+      openrouter: { model: 'meta-llama/llama-3.3-70b-instruct:free', endpoint: 'https://openrouter.ai/api/v1/chat/completions', badge: '🌐 OpenRouter (Llama 3.3 Free)' },
+      nvidia: { model: 'meta/llama-3.1-70b-instruct', endpoint: 'https://integrate.api.nvidia.com/v1/chat/completions', badge: '🟢 NVIDIA NIM' },
+      custom: { model: 'llama3', endpoint: 'http://localhost:11434/v1/chat/completions', badge: '⚙️ Servidor Local / Ollama' }
+    };
+
+    function loadAiPreferences() {
+      const p = localStorage.getItem('multcar_ai_provider') || 'groq';
+      aiProviderSelect.value = p;
+      aiApiKeyInput.value = localStorage.getItem(`multcar_ai_key_${p}`) || '';
+      aiModelInput.value = localStorage.getItem(`multcar_ai_model_${p}`) || PROVIDER_DEFAULTS[p].model;
+      aiEndpointInput.value = localStorage.getItem(`multcar_ai_endpoint_${p}`) || PROVIDER_DEFAULTS[p].endpoint;
+      aiActiveBadge.textContent = PROVIDER_DEFAULTS[p]?.badge || 'IA Configurada';
+    }
+
+    aiProviderSelect.addEventListener('change', () => {
+      const p = aiProviderSelect.value;
+      const def = PROVIDER_DEFAULTS[p];
+      aiModelInput.value = localStorage.getItem(`multcar_ai_model_${p}`) || def.model;
+      aiEndpointInput.value = localStorage.getItem(`multcar_ai_endpoint_${p}`) || def.endpoint;
+      aiApiKeyInput.value = localStorage.getItem(`multcar_ai_key_${p}`) || '';
+      aiActiveBadge.textContent = def.badge;
+    });
+
+    btnToggleAiSettings.addEventListener('click', () => {
+      aiSettingsDrawer.classList.toggle('open');
+    });
+
+    btnSaveAiSettings.addEventListener('click', () => {
+      const p = aiProviderSelect.value;
+      localStorage.setItem('multcar_ai_provider', p);
+      localStorage.setItem(`multcar_ai_key_${p}`, aiApiKeyInput.value.trim());
+      localStorage.setItem(`multcar_ai_model_${p}`, aiModelInput.value.trim());
+      localStorage.setItem(`multcar_ai_endpoint_${p}`, aiEndpointInput.value.trim());
+      alert('Salvo com sucesso!');
+      aiSettingsDrawer.classList.remove('open');
+      aiActiveBadge.textContent = PROVIDER_DEFAULTS[p]?.badge || p.toUpperCase();
+    });
+
+    loadAiPreferences();
+
+    async function queryAiMechanic(userQuestion = null) {
+      const provider = aiProviderSelect.value;
+      const apiKey = aiApiKeyInput.value.trim();
+      const model = aiModelInput.value.trim();
+      const endpoint = aiEndpointInput.value.trim();
+
+      const snapshot = {
+        veiculo: 'Chevrolet Prisma LTZ 1.4 SPE/4 Flex (2015)',
+        sensores: {
+          rpm: rpmVal.textContent + ' RPM',
+          velocidade: speedVal.textContent + ' km/h',
+          temperatura_agua: tempVal.textContent + ' °C',
+          tensao_alternador: voltVal.textContent + ' V',
+          pressao_map: mapVal.textContent + ' kPa',
+          carga: loadVal.textContent,
+          ltft_flex: ltftVal.textContent
+        },
+        dtc: document.getElementById('dtcList').innerText.includes('NENHUMA') ? 'Nenhum erro ativo' : 'Verificar falha'
+      };
+
+      const systemPrompt = `Você é um Engenheiro Mecânico Chefe da GM especialista no motor SPE/4 1.4 Flex.
+Analise a telemetria do Prisma e forneça um parecer direto, técnico, amigável e conciso (máximo 3 parágrafos curtos).`;
+
+      let promptContent = `Dados atuais do meu Prisma:\n${JSON.stringify(snapshot, null, 2)}\n\nFaça o diagnóstico do meu carro agora.`;
+      if (userQuestion) {
+        promptContent = `Dados do carro:\n${JSON.stringify(snapshot, null, 2)}\n\nPergunta do motorista: "${userQuestion}"`;
+      }
+
+      if (!apiKey && provider !== 'custom') {
+        aiResponseText.innerHTML = `⚠️ <strong>Chave não configurada para ${provider.toUpperCase()}.</strong>
+Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemini.
+
+<strong>Diagnóstico Local (Simulado):</strong>
+• <strong>Arrefecimento:</strong> ${tempVal.textContent}°C — Faixa ideal (88°C - 98°C).
+• <strong>Elétrico:</strong> Alternador carregando em ${voltVal.textContent}V — Bateria OK.
+• <strong>Injeção:</strong> LTFT em ${ltftVal.textContent} — Mistura e combustível estáveis.
+• <strong>Veredito:</strong> O motor está operando em perfeitas condições de fábrica!`;
+        return;
+      }
+
+      aiResponseText.textContent = `⏳ Consultando Mecânico IA via ${provider.toUpperCase()}...`;
+
+      try {
+        const headers = { 'Content-Type': 'application/json' };
+        if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
+        if (provider === 'openrouter') {
+          headers['HTTP-Referer'] = 'https://multcar.local';
+          headers['X-Title'] = 'Multcar Pro';
+        }
+
+        const bodyData = {
+          model: model,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: promptContent }
+          ],
+          temperature: 0.3,
+          max_tokens: 600
+        };
+
+        const res = await fetch(endpoint, { method: 'POST', headers, body: JSON.stringify(bodyData) });
+        if (!res.ok) throw new Error(`Erro ${res.status}: ${await res.text()}`);
+
+        const data = await res.json();
+        const reply = data.choices?.[0]?.message?.content || 'Sem resposta.';
+        aiResponseText.textContent = reply;
+      } catch (err) {
+        console.error(err);
+        aiResponseText.textContent = `❌ Erro com ${provider.toUpperCase()}: ${err.message}`;
+      }
+    }
+
+    btnRunAiDiagnosis.addEventListener('click', () => queryAiMechanic());
+
+    document.getElementById('btnSendAiQuestion').addEventListener('click', () => {
+      const q = document.getElementById('aiQuestionInput').value.trim();
+      if (q) {
+        queryAiMechanic(q);
+        document.getElementById('aiQuestionInput').value = '';
+      }
+    });
+
+    document.getElementById('btnSpeakAiResponse').addEventListener('click', () => {
+      if (!('speechSynthesis' in window)) return alert('Síntese de voz não suportada.');
+      window.speechSynthesis.cancel();
+      const text = aiResponseText.textContent.replace(/[⚠️🚨✅•*]/g, '');
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = 'pt-BR';
+      utterance.rate = 1.05;
+      window.speechSynthesis.speak(utterance);
+    });
+
+    // =========================================================================
+    // PROGRESSIVE WEB APP (PWA) & SERVICE WORKER
+    // =========================================================================
+    let deferredPrompt = null;
+    const btnInstallPwa = document.getElementById('btnInstallPwa');
+
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredPrompt = e;
+      if (btnInstallPwa) {
+        btnInstallPwa.style.display = 'inline-flex';
+      }
+    });
+
+    if (btnInstallPwa) {
+      btnInstallPwa.addEventListener('click', async () => {
+        if (!deferredPrompt) return;
+        deferredPrompt.prompt();
+        const { outcome } = await deferredPrompt.userChoice;
+        console.log('[PWA] Escolha de instalação:', outcome);
+        deferredPrompt = null;
+        btnInstallPwa.style.display = 'none';
+      });
+    }
+
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js')
+          .then((reg) => console.log('[PWA] Service Worker registrado:', reg.scope))
+          .catch((err) => console.warn('[PWA] Erro ao registrar Service Worker:', err));
+      });
+    }
+
+    // =========================================================================
+    // PROTOCOLO XTOOL AD10 & WEB BLUETOOTH (NORDIC UART SERVICE)
+    // =========================================================================
+    const AD10_NUS = {
+      SERVICE: '6e400001-b5a3-f393-e0a9-e50e24dcca9e',
+      TX_CHAR: '6e400004-b5a3-f393-e0a9-e50e24dcca9e', // Envio (Celular -> AD10)
+      RX_CHAR: '6e400003-b5a3-f393-e0a9-e50e24dcca9e'  // Notificações (AD10 -> Celular)
+    };
+
+    let bleDevice = null;
+    let bleServer = null;
+    let bleTx = null;
+    let bleRx = null;
+    let isConnectedBle = false;
+    let isPolling = false;
+    let pollingInterval = null;
+    let pollIndex = 0;
+
+    // Fila de PIDs prioritários (Prisma 1.4 SPE/4)
+    const POLL_QUEUE = [
+      { mode: 0x01, pid: 0x0C }, // RPM (Alta prioridade)
+      { mode: 0x01, pid: 0x0D }, // Velocidade
+      { mode: 0x01, pid: 0x0C }, // RPM
+      { mode: 0x01, pid: 0x0B }, // MAP
+      { mode: 0x01, pid: 0x0C }, // RPM
+      { mode: 0x01, pid: 0x04 }, // Carga do Motor
+      { mode: 0x01, pid: 0x05 }, // Temperatura Arrefecimento
+      { mode: 0x01, pid: 0x0C }, // RPM
+      { mode: 0x01, pid: 0x42 }, // Tensão do Módulo / Bateria
+      { mode: 0x01, pid: 0x07 }, // LTFT (Ajuste Longo Prazo)
+      { mode: 0x01, pid: 0x14 }  // Sonda Lambda 1
+    ];
+
+    // Banco de Falhas DTC GM SPE/4 em Português
+    const DTC_DB = {
+      P0300: { desc: 'Falha de combustão / ignição aleatória em múltiplos cilindros', rec: 'Inspecione cabos de vela, velas e bicos injetores do Prisma.' },
+      P0301: { desc: 'Falha de ignição no Cilindro 1', rec: 'Vela ou cabo do cilindro 1.' },
+      P0302: { desc: 'Falha de ignição no Cilindro 2', rec: 'Vela ou cabo do cilindro 2.' },
+      P0303: { desc: 'Falha de ignição no Cilindro 3', rec: 'Vela ou cabo do cilindro 3.' },
+      P0304: { desc: 'Falha de ignição no Cilindro 4', rec: 'Vela ou cabo do cilindro 4.' },
+      P0351: { desc: 'Falha na bobina de ignição primária/secundária', rec: 'Testar bobina de ignição e chicote elétrico.' },
+      P0335: { desc: 'Sensor de rotação CKP - Falha de sinal', rec: 'Sensor de rotação com leitura intermitente; risco de parada do motor.' },
+      P0115: { desc: 'Circuito do sensor de temperatura (ECT) com avaria', rec: 'Verificar sensor de temperatura d’água ou plugue.' },
+      P0117: { desc: 'Sensor ECT - Entrada Baixa (Superaquecimento)', rec: 'Temperatura excessivamente alta no motor.' },
+      P0118: { desc: 'Sensor ECT - Circuito Aberto', rec: 'Sensor desconectado; ventoinha acionada em modo de segurança.' },
+      P0128: { desc: 'Válvula termostática travada aberta', rec: 'Motor trabalhando frio, aumentando consumo em até 20%.' },
+      P0171: { desc: 'Mistura muito pobre (Banco 1)', rec: 'Possível entrada falsa de ar no coletor ou bicos sujos.' },
+      P0172: { desc: 'Mistura muito rica (Banco 1)', rec: 'Excesso de combustível ou sonda lambda descalibrada.' },
+      P0130: { desc: 'Sonda Lambda 1 - Falha no circuito elétrico', rec: 'Inspecionar sensor pré-catalisador.' },
+      P0133: { desc: 'Sonda Lambda 1 - Resposta lenta', rec: 'Sonda desgastada ou combustível adulterado.' },
+      P0420: { desc: 'Eficiência do catalisador abaixo do limite', rec: 'Catalisador esgotado ou gasolina ruim.' },
+      P0107: { desc: 'Sensor MAP - Entrada Baixa', rec: 'Inspecionar mangueira de vácuo do coletor de admissão.' },
+      P0108: { desc: 'Sensor MAP - Entrada Alta', rec: 'Pressão anômala no coletor ou sensor defeituoso.' },
+      P0122: { desc: 'Sensor de borboleta (TPS) - Sinal baixo', rec: 'Limpar corpo de borboleta (TBI) e verificar chicote.' },
+      P0500: { desc: 'Sensor de velocidade do veículo (VSS)', rec: 'Velocímetro oscilando ou parado.' },
+      P0562: { desc: 'Tensão do sistema elétrica baixa (< 11.5V)', rec: 'Alternador não está recarregando a bateria.' },
+      P0563: { desc: 'Tensão do sistema excessivamente alta (> 15.5V)', rec: 'Regulador do alternador em curto; perigo para a ECU.' }
+    };
+
+    /**
+     * Monta o frame CAN 11-bit proprietário do XTOOL AD10:
+     * [0x08, 0x07, 0xDF, length, mode, pid...]
+     */
+    function buildCan11BitFrame(mode, pid = null, extra = []) {
+      const payload = [mode];
+      if (pid !== null && pid !== undefined) payload.push(pid);
+      if (extra.length > 0) payload.push(...extra);
+      return new Uint8Array([0x08, 0x07, 0xdf, payload.length, ...payload]);
+    }
+
+    /**
+     * Processa bytes brutos recebidos na notificação do AD10 (RX 6E400003)
+     */
+    function processIncomingCanBytes(data) {
+      for (let i = 0; i < data.length - 2; i++) {
+        // Resposta Mode 01: 0x41
+        if (data[i] === 0x41) {
+          const pid = data[i + 1];
+          const a = data[i + 2] ?? 0;
+          const b = data[i + 3] ?? 0;
+
+          switch (pid) {
+            case 0x0C: { // RPM: ((A * 256) + B) / 4
+              const rpm = Math.round(((a * 256) + b) / 4);
+              rpmVal.textContent = rpm;
+              updateGauge(rpmFill, rpm, 7000);
+              updateShiftLight(rpm);
+              break;
+            }
+            case 0x0D: { // Velocidade: A (km/h)
+              const speed = a;
+              speedVal.textContent = speed;
+              updateGauge(speedFill, speed, 200);
+              handlePerformanceTimer(speed);
+              break;
+            }
+            case 0x05: { // Temperatura da Água: A - 40 (°C)
+              setTemperature(a - 40);
+              break;
+            }
+            case 0x42: { // Tensão da Bateria/ECU: ((A * 256) + B) / 1000 (V)
+              const volt = ((a * 256) + b) / 1000;
+              setVoltage(volt);
+              break;
+            }
+            case 0x0B: { // MAP Pressão Coletor: A (kPa)
+              mapVal.textContent = a;
+              document.getElementById('aiDataMap').textContent = a + ' kPa';
+              break;
+            }
+            case 0x04: { // Carga do Motor: (A * 100) / 255 (%)
+              const load = Math.round((a * 100) / 255);
+              loadVal.textContent = load + '%';
+              loadBar.style.width = load + '%';
+              break;
+            }
+            case 0x07: { // LTFT Ajuste Longo: (A - 128) * 100 / 128 (%)
+              const ltft = (((a - 128) * 100) / 128).toFixed(1);
+              const sign = ltft >= 0 ? '+' : '';
+              ltftVal.textContent = `${sign}${ltft}%`;
+              document.getElementById('aiDataLtft').textContent = `${sign}${ltft}%`;
+              break;
+            }
+            case 0x14: { // Sonda Lambda 1 Tensão: A / 200 (V)
+              const o2v = a / 200;
+              o2VoltageText.textContent = o2v.toFixed(2) + ' V';
+              drawO2Waveform(o2v);
+              break;
+            }
+          }
+          break;
+        }
+
+        // Resposta Mode 03 (Códigos de Falha DTCs: 0x43)
+        if (data[i] === 0x43) {
+          const rawCodes = data.slice(i + 1);
+          renderDtcResults(rawCodes);
+          break;
+        }
+
+        // Resposta Mode 04 (Falhas Apagadas: 0x44)
+        if (data[i] === 0x44) {
+          document.getElementById('dtcList').innerHTML = `
+            <div class="dtc-row clean">
+              <div class="dtc-code" style="color: var(--green);">FALHAS APAGADAS (MODE 04)</div>
+              <div class="dtc-desc">Comando executado com sucesso na ECU GM. Luz de injeção apagada.</div>
+            </div>
+          `;
+          showToast('✅ Limpeza Concluída', 'Códigos de falha e luz de injeção apagados com sucesso!', 'success', 5000);
+          break;
+        }
+      }
+    }
+
+    function renderDtcResults(bytes) {
+      const dtcContainer = document.getElementById('dtcList');
+      dtcContainer.innerHTML = '';
+      const codes = [];
+
+      for (let j = 0; j < bytes.length - 1; j += 2) {
+        const b1 = bytes[j];
+        const b2 = bytes[j + 1];
+        if (b1 === 0 && b2 === 0) continue;
+
+        const typePrefix = ['P', 'C', 'B', 'U'][(b1 >> 6) & 0x03];
+        const digit1 = (b1 >> 4) & 0x03;
+        const digit2 = b1 & 0x0f;
+        const hexRest = b2.toString(16).padStart(2, '0');
+        const code = `${typePrefix}${digit1}${digit2}${hexRest}`.toUpperCase();
+        codes.push(code);
+      }
+
+      if (codes.length === 0) {
+        dtcContainer.innerHTML = `
+          <div class="dtc-row clean">
+            <div class="dtc-code" style="color: var(--green);">NENHUMA FALHA ATIVA</div>
+            <div class="dtc-desc">Injeção eletrônica Delphi GM sem avarias registradas na memória.</div>
+          </div>
+        `;
+        showToast('✅ ECU Limpa', 'Nenhuma falha ativa registrada na memória da ECU GM.', 'success', 4000);
+        return;
+      }
+
+      showToast('⚠️ Falhas Detectadas', `Foram encontrados ${codes.length} código(s) de falha. Veja na aba Falhas DTC.`, 'warning', 6000);
+
+      codes.forEach((code) => {
+        const info = DTC_DB[code] || { desc: 'Código de falha OBD2 genérico', rec: 'Consultar manual do fabricante GM.' };
+        const row = document.createElement('div');
+        row.className = 'dtc-row';
+        row.innerHTML = `
+          <div class="dtc-code">${code}</div>
+          <div class="dtc-desc"><strong>${info.desc}</strong><br><span style="color: var(--text-dim);">${info.rec}</span></div>
+        `;
+        dtcContainer.appendChild(row);
+      });
+    }
+
+    let isNativeBle = false;
+    let currentDeviceId = null;
+
+    /**
+     * Transmite pacote fragmentado em blocos de 20 bytes (MTU padrão BLE GATT)
+     * Suporta tanto APK Nativo (Capacitor) quanto PWA (Web Bluetooth)
+     */
+    async function sendCanFrame(frameBytes) {
+      try {
+        if (isNativeBle && currentDeviceId && window.capacitorCommunityBluetoothLe) {
+          const BleClient = window.capacitorCommunityBluetoothLe.BleClient;
+          for (let i = 0; i < frameBytes.length; i += 20) {
+            const chunk = frameBytes.slice(i, i + 20);
+            const dataView = new DataView(chunk.buffer, chunk.byteOffset, chunk.byteLength);
+            await BleClient.writeWithoutResponse(currentDeviceId, AD10_NUS.SERVICE, AD10_NUS.TX_CHAR, dataView);
+          }
+          return;
+        }
+
+        if (bleTx) {
+          for (let i = 0; i < frameBytes.length; i += 20) {
+            const chunk = frameBytes.slice(i, i + 20);
+            if (bleTx.writeValueWithoutResponse) {
+              await bleTx.writeValueWithoutResponse(chunk);
+            } else {
+              await bleTx.writeValue(chunk);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('[BLE TX Error]', err);
+      }
+    }
+
+    function startPolling() {
+      if (isPolling) return;
+      isPolling = true;
+      pollIndex = 0;
+
+      pollingInterval = setInterval(async () => {
+        if (!isConnectedBle) return;
+        const cmd = POLL_QUEUE[pollIndex];
+        pollIndex = (pollIndex + 1) % POLL_QUEUE.length;
+        const frame = buildCan11BitFrame(cmd.mode, cmd.pid);
+        await sendCanFrame(frame);
+      }, 75); // Polling contínuo rápido a ~13 Hz
+    }
+
+    function stopPolling() {
+      isPolling = false;
+      if (pollingInterval) {
+        clearInterval(pollingInterval);
+        pollingInterval = null;
+      }
+    }
+
+    function onBleDisconnected() {
+      console.warn('[BLE] Dispositivo desconectado');
+      isConnectedBle = false;
+      isNativeBle = false;
+      currentDeviceId = null;
+      stopPolling();
+      connDot.className = 'dot';
+      connText.textContent = 'Off';
+      btnConnectBle.textContent = '📡 Conectar';
+      btnConnectBle.classList.remove('btn-secondary');
+    }
+
+    async function disconnectBle() {
+      try {
+        if (isNativeBle && currentDeviceId && window.capacitorCommunityBluetoothLe) {
+          await window.capacitorCommunityBluetoothLe.BleClient.disconnect(currentDeviceId);
+        }
+        if (bleDevice && bleDevice.gatt && bleDevice.gatt.connected) {
+          bleDevice.gatt.disconnect();
+        }
+      } catch (e) {
+        console.warn('Erro ao desconectar:', e);
+      }
+      onBleDisconnected();
+      showToast('🔌 Desconectado', 'Comunicação Bluetooth com o AD10 encerrada.', 'info', 3000);
+    }
+
+    async function toggleBleConnection() {
+      if (isConnectedBle) {
+        await disconnectBle();
+        return;
+      }
+
+      connDot.className = 'dot connecting';
+      connText.textContent = 'Buscando...';
+
+      // =======================================================================
+      // MODO 1: APK NATIVO ANDROID (CAPACITOR BLE COM AUTO-CONEXÃO IGUAL XTOOL)
+      // =======================================================================
+      const isCapacitorNative = window.Capacitor && (typeof window.Capacitor.isNativePlatform === 'function' ? window.Capacitor.isNativePlatform() : false);
+      const BleClient = window.capacitorCommunityBluetoothLe ? window.capacitorCommunityBluetoothLe.BleClient : null;
+
+      if (isCapacitorNative && BleClient) {
+        try {
+          showToast('🛰️ Bluetooth Nativo', 'Inicializando BLE...', 'info', 0);
+          await BleClient.initialize();
+
+          // 1. Tenta reconexão direta pelo último MAC gravado (idêntico ao app oficial XTOOL)
+          const lastMac = localStorage.getItem('ad10_last_mac');
+          if (lastMac) {
+            try {
+              showToast('🔌 Reconectando', `Conectando diretamente ao AD10 (${lastMac})...`, 'info', 0);
+              await BleClient.connect(lastMac, () => {
+                onBleDisconnected();
+                showToast('⚠️ Desconectado', 'O dongle AD10 foi desconectado.', 'warning', 4000);
+              });
+
+              await BleClient.startNotifications(lastMac, AD10_NUS.SERVICE, AD10_NUS.RX_CHAR, (val) => {
+                processIncomingCanBytes(new Uint8Array(val.buffer));
+              });
+
+              currentDeviceId = lastMac;
+              isNativeBle = true;
+              isConnectedBle = true;
+              connDot.className = 'dot connected';
+              connText.textContent = 'AD10 OK';
+              btnConnectBle.textContent = '🔌 Desconectar';
+              btnConnectBle.classList.add('btn-secondary');
+              showToast('✅ Conectado!', 'Reconectado ao AD10 com sucesso!', 'success', 3000);
+              if (isSimulating) btnSimulate.click();
+              startPolling();
+              return;
+            } catch (e) {
+              console.log('Último MAC indisponível, iniciando varredura BLE...', e);
+            }
+          }
+
+          // 2. Varredura Automática BLE (não exige que o usuário procure em lista)
+          showToast('🔍 Procurando AD10', 'Buscando sinal BLE do AD10... Ligue a chave do carro!', 'warning', 0);
+
+          let found = false;
+          await BleClient.requestLEScan({}, async (result) => {
+            const devName = result.device.name || '';
+            const devId = result.device.deviceId;
+            console.log('[BLE Scan Result]', devName, devId);
+
+            if (!found && (devName === 'AD10' || devName.includes('AD10') || devName.toLowerCase().includes('advancer'))) {
+              found = true;
+              try { await BleClient.stopLEScan(); } catch {}
+              showToast('🔌 AD10 Encontrado!', `Conectando automaticamente ao ${devName}...`, 'info', 0);
+
+              await BleClient.connect(devId, () => {
+                onBleDisconnected();
+                showToast('⚠️ Desconectado', 'O dongle AD10 foi desconectado.', 'warning', 4000);
+              });
+
+              await BleClient.startNotifications(devId, AD10_NUS.SERVICE, AD10_NUS.RX_CHAR, (val) => {
+                processIncomingCanBytes(new Uint8Array(val.buffer));
+              });
+
+              localStorage.setItem('ad10_last_mac', devId);
+              currentDeviceId = devId;
+              isNativeBle = true;
+              isConnectedBle = true;
+
+              connDot.className = 'dot connected';
+              connText.textContent = 'AD10 OK';
+              btnConnectBle.textContent = '🔌 Desconectar';
+              btnConnectBle.classList.add('btn-secondary');
+
+              showToast('✅ Conectado!', 'AD10 conectado automaticamente com sucesso! Lendo dados...', 'success', 4000);
+              if (isSimulating) btnSimulate.click();
+              startPolling();
+            }
+          });
+
+          // Timeout de 12 segundos caso o aparelho não esteja transmitindo sinal
+          setTimeout(async () => {
+            if (!found && !isConnectedBle) {
+              try { await BleClient.stopLEScan(); } catch {}
+              onBleDisconnected();
+              showToast(
+                '⚠️ AD10 Não Encontrado',
+                'O sinal BLE do AD10 não foi detectado.<br><br>' +
+                '• A chave do carro está ligada (painel aceso)?<br>' +
+                '• O LED do AD10 acendeu na porta OBD2?<br>' +
+                '• O Bluetooth e a Localização (GPS) do celular estão ligados?<br>' +
+                '• Feche outros aplicativos OBD2 que possam estar em uso.',
+                'error',
+                9000
+              );
+            }
+          }, 12000);
+
+          return;
+
+        } catch (err) {
+          console.error('[Capacitor BLE Error]', err);
+          onBleDisconnected();
+          showToast('❌ Erro de Conexão', `Falha ao conectar no AD10:<br><strong>${err.message || err}</strong><br><br>💡 Dicas:<br>• Verifique se o Bluetooth e GPS do celular estão ATIVADOS.<br>• Ligue a ignição do carro para ligar o LED do AD10.<br>• Feche outros apps OBD2 em segundo plano.`, 'error', 9000);
+          return;
+        }
+      }
+
+      // =======================================================================
+      // MODO 2: WEB BLUETOOTH API (GOOGLE CHROME NO CELULAR / PWA)
+      // =======================================================================
+      if (navigator.bluetooth) {
+        try {
+          showToast('🔍 Procurando AD10', 'Abrindo seletor Bluetooth do Android... Selecione o seu AD10.', 'info', 0);
+
+          // acceptAllDevices garante que encontrará o AD10 independente do nome anunciado
+          bleDevice = await navigator.bluetooth.requestDevice({
+            acceptAllDevices: true,
+            optionalServices: [
+              AD10_NUS.SERVICE,
+              '00001800-0000-1000-8000-00805f9b34fb',
+              '00001801-0000-1000-8000-00805f9b34fb'
+            ]
+          });
+
+          if (!bleDevice) throw new Error('Nenhum aparelho selecionado.');
+
+          showToast('🔌 Conectando', `Conectando ao ${bleDevice.name || 'AD10'}...`, 'info', 0);
+          bleDevice.addEventListener('gattserverdisconnected', () => {
+            onBleDisconnected();
+            showToast('⚠️ Desconectado', 'O dongle AD10 foi desconectado.', 'warning', 4000);
+          });
+
+          bleServer = await bleDevice.gatt.connect();
+          const service = await bleServer.getPrimaryService(AD10_NUS.SERVICE);
+          bleTx = await service.getCharacteristic(AD10_NUS.TX_CHAR);
+          bleRx = await service.getCharacteristic(AD10_NUS.RX_CHAR);
+
+          await bleRx.startNotifications();
+          bleRx.addEventListener('characteristicvaluechanged', (e) => {
+            const buf = new Uint8Array(e.target.value.buffer);
+            processIncomingCanBytes(buf);
+          });
+
+          isConnectedBle = true;
+          isNativeBle = false;
+          connDot.className = 'dot connected';
+          connText.textContent = 'AD10 BLE';
+          btnConnectBle.textContent = '🔌 Desconectar';
+          btnConnectBle.classList.add('btn-secondary');
+
+          showToast('✅ Conectado!', `AD10 conectado via Web Bluetooth! Lendo ECU do Prisma...`, 'success', 4000);
+          if (isSimulating) btnSimulate.click();
+          startPolling();
+          return;
+
+        } catch (err) {
+          console.warn('[Web Bluetooth Error]', err);
+          onBleDisconnected();
+          const isUserCancel = err.name === 'NotFoundError' && (err.message || '').toLowerCase().includes('cancel');
+          if (isUserCancel) {
+            showToast('ℹ️ Cancelado', 'Você fechou o seletor sem escolher um aparelho.', 'warning', 3000);
+          } else {
+            showToast('❌ Erro Bluetooth', `Não foi possível parear com o AD10:<br><strong>${err.message}</strong><br><br>💡 Dicas:<br>• Verifique se o Bluetooth do celular está LIGADO.<br>• Ative a Localização / GPS do celular (obrigatório pelo Android).<br>• Ligue a ignição do Prisma para acender o LED do AD10.`, 'error', 9000);
+          }
+          return;
+        }
+      }
+
+      // =======================================================================
+      // MODO 3: NENHUM DISPONÍVEL
+      // =======================================================================
+      onBleDisconnected();
+      showToast(
+        '⚠️ Bluetooth Não Disponível',
+        'Seu navegador atual não tem suporte a Bluetooth.<br><br>• Abra no <strong>Google Chrome no Android</strong> (com HTTPS).<br>• Ou abra pelo aplicativo nativo instalado (APK).',
+        'error',
+        9000
+      );
+    }
+
+    btnConnectBle.addEventListener('click', toggleBleConnection);
+
+    // Varrer DTCs (Modo 03)
+    document.getElementById('btnScanDtc').addEventListener('click', async () => {
+      if (!isConnectedBle) {
+        alert('Conecte ao AD10 via Bluetooth antes de varrer os DTCs (ou use ▶ Simular).');
+        return;
+      }
+      const frame = buildCan11BitFrame(0x03);
+      await sendCanFrame(frame);
+    });
+
+    // Apagar DTCs (Modo 04)
+    document.getElementById('btnClearDtc').addEventListener('click', async () => {
+      if (!confirm('Deseja realmente apagar as falhas e resetar a luz de injeção na ECU?')) return;
+      if (isConnectedBle) {
+        const frame = buildCan11BitFrame(0x04);
+        await sendCanFrame(frame);
+      } else {
+        document.getElementById('dtcList').innerHTML = `
+          <div class="dtc-row clean">
+            <div class="dtc-code" style="color: var(--green);">FALHAS APAGADAS (MODE 04)</div>
+            <div class="dtc-desc">Luz de injeção apagada com sucesso (Simulado).</div>
+          </div>
+        `;
+      }
+    });
+
+    // =========================================================================
+    // MODO SIMULAÇÃO (DEMONSTRAÇÃO SEM HARDWARE)
+    // =========================================================================
+    let isSimulating = false;
+    let simInterval = null;
+
+    btnSimulate.addEventListener('click', () => {
+      if (isSimulating) {
+        clearInterval(simInterval);
+        isSimulating = false;
+        btnSimulate.textContent = '▶ Simular';
+        if (!isConnectedBle) {
+          connDot.className = 'dot';
+          connText.textContent = 'Off';
+        }
+        return;
+      }
+
+      if (isConnectedBle) {
+        if (!confirm('Desconectar o AD10 real para iniciar a simulação?')) return;
+        toggleBleConnection();
+      }
+
+      isSimulating = true;
+      btnSimulate.textContent = '⏹ Parar';
+      connDot.className = 'dot connected';
+      connText.textContent = 'Simulando';
+
+      let simRpm = 850;
+      let simSpeed = 0;
+      let simTemp = 88;
+      let accelerating = true;
+      let o2Phase = 0;
+
+      simInterval = setInterval(() => {
+        if (accelerating) {
+          simRpm += 160;
+          simSpeed += 2.8;
+          if (simRpm > 6250) accelerating = false;
+        } else {
+          simRpm -= 90;
+          simSpeed = Math.max(simSpeed - 1.5, 0);
+          if (simRpm < 900) {
+            accelerating = true;
+            document.getElementById('btnResetTimer').click();
+          }
+        }
+
+        rpmVal.textContent = Math.round(simRpm);
+        updateGauge(rpmFill, simRpm, 7000);
+        updateShiftLight(simRpm);
+
+        speedVal.textContent = Math.round(simSpeed);
+        updateGauge(speedFill, simSpeed, 200);
+
+        handlePerformanceTimer(simSpeed);
+
+        simTemp = 91 + Math.sin(Date.now() / 6000) * 3;
+        setTemperature(Math.round(simTemp));
+
+        const volt = 14.35 + (Math.random() * 0.1 - 0.05);
+        setVoltage(volt);
+
+        const load = Math.min(Math.round(simRpm / 70), 95);
+        loadVal.textContent = load + '%';
+        loadBar.style.width = load + '%';
+
+        const mapKpa = Math.round(35 + (load * 0.6));
+        mapVal.textContent = mapKpa;
+        document.getElementById('aiDataMap').textContent = mapKpa + ' kPa';
+
+        ltftVal.textContent = '+1.6%';
+        document.getElementById('aiDataLtft').textContent = '+1.6%';
+
+        o2Phase += 0.25;
+        const o2V = 0.5 + Math.sin(o2Phase) * 0.38 + (Math.random() * 0.04 - 0.02);
+        o2VoltageText.textContent = o2V.toFixed(2) + ' V';
+        drawO2Waveform(o2V);
+      }, 100);
+    });
+  </script>
+</body>
+</html>

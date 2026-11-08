@@ -1,0 +1,26 @@
+{
+  "name": "Multcar Pro — Telemetria & Mecânico IA",
+  "short_name": "Multcar Pro",
+  "description": "Scanner OBD2 automotivo e telemetria em tempo real com Mecânico IA para Chevrolet Prisma 1.4 e veículos OBD2 via XTOOL AD10.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#070b14",
+  "theme_color": "#0a0f1d",
+  "categories": ["utilities", "auto-and-vehicles"],
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

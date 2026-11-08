@@ -1,0 +1,687 @@
+<title>Checklist do Teste ELM327</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  /* Plano: fundo cinza-frio de oficina, âmbar de luz de advertência como acento,
+     Plex Sans para leitura e Plex Mono para rótulos técnicos. Coluna única, mobile-first. */
+  :root {
+    --bg: #f4f6f7;
+    --surface: #ffffff;
+    --surface-2: #eaedef;
+    --fg: #17202a;
+    --muted: #5a6773;
+    --line: #d7dde2;
+    --accent: #b45309;
+    --accent-fg: #ffffff;
+    --ok: #15803d;
+    --warn: #b45309;
+    --danger: #b91c1c;
+    --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #10161b;
+      --surface: #171f26;
+      --surface-2: #1e282f;
+      --fg: #e8eef2;
+      --muted: #93a1ac;
+      --line: #2b3741;
+      --accent: #f0a13c;
+      --accent-fg: #1a1206;
+      --ok: #4ade80;
+      --warn: #f0a13c;
+      --danger: #f87171;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #10161b;
+    --surface: #171f26;
+    --surface-2: #1e282f;
+    --fg: #e8eef2;
+    --muted: #93a1ac;
+    --line: #2b3741;
+    --accent: #f0a13c;
+    --accent-fg: #1a1206;
+    --ok: #4ade80;
+    --warn: #f0a13c;
+    --danger: #f87171;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-body);
+    font-size: 15px;
+    line-height: 1.45;
+    padding-block: 0 40px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0 0 auto;
+    height: env(safe-area-inset-top, 0px);
+    z-index: 10;
+    background: var(--bg);
+  }
+
+  main { max-width: 640px; margin: 0 auto; }
+
+  .topbar {
+    position: sticky;
+    top: env(safe-area-inset-top, 0px);
+    z-index: 5;
+    background: var(--bg);
+    padding-top: 14px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 18px;
+  }
+
+  .eyebrow {
+    margin: 0 0 4px;
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  h1 {
+    margin: 0;
+    font-size: 21px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    text-wrap: balance;
+  }
+
+  .progress-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 12px;
+  }
+
+  .progress-track {
+    flex: 1;
+    height: 6px;
+    border-radius: 3px;
+    background: var(--surface-2);
+    overflow: hidden;
+    min-width: 0;
+  }
+
+  .progress-fill {
+    height: 100%;
+    width: 0%;
+    border-radius: 3px;
+    background: var(--accent);
+    transition: width 180ms ease;
+  }
+
+  #count {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 14px;
+    min-width: 0;
+  }
+
+  .card-head { margin-bottom: 10px; }
+
+  h2 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+  }
+
+  .items { display: flex; flex-direction: column; gap: 2px; }
+
+  .item {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 10px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    min-height: 44px;
+  }
+
+  .item:hover { background: var(--surface-2); }
+
+  .item input[type="checkbox"] {
+    inline-size: 20px;
+    block-size: 20px;
+    flex: none;
+    margin: 1px 0 0;
+    accent-color: var(--accent);
+    cursor: pointer;
+  }
+
+  .item-text { min-width: 0; padding-top: 1px; }
+
+  .item:has(input:checked) .item-text {
+    color: var(--muted);
+    text-decoration: line-through;
+    text-decoration-color: var(--line);
+  }
+
+  .sub {
+    display: block;
+    font-size: 12.5px;
+    color: var(--muted);
+    margin-top: 1px;
+  }
+
+  .chip {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--muted);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 1px 7px;
+    margin-left: 4px;
+    vertical-align: 1px;
+  }
+
+  .verdicts { display: flex; flex-direction: column; gap: 8px; }
+
+  .verdict {
+    --vc: var(--muted);
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 12px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    cursor: pointer;
+    min-height: 44px;
+  }
+
+  .verdict:hover { background: var(--surface-2); }
+
+  .verdict input {
+    inline-size: 18px;
+    block-size: 18px;
+    flex: none;
+    margin: 2px 0 0;
+    accent-color: var(--vc);
+    cursor: pointer;
+  }
+
+  .verdict.v-a { --vc: var(--danger); }
+  .verdict.v-b { --vc: var(--ok); }
+  .verdict.v-c { --vc: var(--warn); }
+
+  .verdict:has(input:checked) {
+    border-color: var(--vc);
+    background: color-mix(in srgb, var(--vc) 10%, var(--surface));
+  }
+
+  .verdict strong { font-weight: 600; }
+
+  .notes-label {
+    display: block;
+    margin: 14px 0 6px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+
+  textarea {
+    width: 100%;
+    min-height: 76px;
+    resize: vertical;
+    font-family: var(--font-body);
+    font-size: 14px;
+    line-height: 1.45;
+    color: var(--fg);
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 10px 12px;
+  }
+
+  textarea:focus-visible,
+  .btn:focus-visible,
+  .item:focus-within,
+  .verdict:focus-within {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  .remember {
+    margin: 14px 0 0;
+    padding: 10px 12px;
+    border-left: 3px solid var(--accent);
+    background: var(--surface-2);
+    border-radius: 0 8px 8px 0;
+    font-size: 13.5px;
+    color: var(--muted);
+  }
+
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 4px;
+  }
+
+  .btn {
+    font-family: var(--font-body);
+    font-size: 14px;
+    font-weight: 500;
+    padding: 11px 18px;
+    border-radius: 9px;
+    border: 1px solid var(--line);
+    background: var(--surface);
+    color: var(--fg);
+    cursor: pointer;
+    min-height: 44px;
+  }
+
+  .btn:hover { background: var(--surface-2); }
+
+  .btn-primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--accent-fg);
+  }
+
+  .btn-primary:hover { filter: brightness(1.06); background: var(--accent); }
+
+  .btn.armed {
+    border-color: var(--danger);
+    color: var(--danger);
+  }
+
+  .status {
+    min-height: 20px;
+    margin-top: 12px;
+    font-size: 13px;
+    color: var(--muted);
+    opacity: 0;
+    transition: opacity 160ms ease;
+  }
+
+  .status.show { opacity: 1; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .progress-fill, .status { transition: none; }
+  }
+</style>
+
+<main>
+  <header class="topbar">
+    <p class="eyebrow">AD10 · BLE 4.2 · Prisma 2015</p>
+    <h1>Teste ELM327 Identifier</h1>
+    <div class="progress-row">
+      <div class="progress-track" role="progressbar" aria-label="Itens verificados" aria-valuemin="0" aria-valuemax="15" aria-valuenow="0">
+        <div class="progress-fill" id="barfill"></div>
+      </div>
+      <span id="count">0 de 15</span>
+    </div>
+  </header>
+
+  <section class="card">
+    <div class="card-head">
+      <p class="eyebrow">01</p>
+      <h2>Antes de sair do carro</h2>
+    </div>
+    <div class="items">
+      <label class="item">
+        <input type="checkbox" data-key="bateria">
+        <span class="item-text">Celular carregado<span class="sub">Acima de 30% — o teste leva uns 10 minutos.</span></span>
+      </label>
+      <label class="item">
+        <input type="checkbox" data-key="app">
+        <span class="item-text">App <strong>ELM327 Identifier</strong> instalado<span class="sub">Play Store.</span></span>
+      </label>
+      <label class="item">
+        <input type="checkbox" data-key="xtool-fechado">
+        <span class="item-text">App oficial XTOOL fechado<span class="sub">Configurações › Apps › XTOOL › Forçar parada.</span></span>
+      </label>
+      <label class="item">
+        <input type="checkbox" data-key="permissoes">
+        <span class="item-text">Permissões concedidas<span class="sub">"Dispositivos por perto" e "Localização" para o ELM327 Identifier (Android 12+).</span></span>
+      </label>
+      <label class="item">
+        <input type="checkbox" data-key="bluetooth">
+        <span class="item-text">Bluetooth do celular ligado</span>
+      </label>
+      <label class="item">
+        <input type="checkbox" data-key="torque" data-skip>
+        <span class="item-text">Torque Lite instalado <span class="chip">opcional</span><span class="sub">Teste em dobro: se falhar igual, reforça a hipótese.</span></span>
+      </label>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="card-head">
+      <p class="eyebrow">02</p>
+      <h2>No carro</h2>
+    </div>
+    <div class="items">
+      <label class="item">
+        <input type="checkbox" data-key="obd2">
+        <span class="item-text">AD10 conectado na porta OBD2<span class="sub">Embaixo do painel, lado do motorista.</span></span>
+      </label>
+      <label class="item">
+        <input type="checkbox" data-key="ignicao">
+        <span class="item-text">Ignição ligada (posição ON)<span class="sub">Não precisa dar partida no motor.</span></span>
+      </label>
+      <label class="item">
+        <input type="checkbox" data-key="led">
+        <span class="item-text">LED do dongle acendeu ou piscou</span>
+      </label>
+      <label class="item">
+        <input type="checkbox" data-key="abrir-app">
+        <span class="item-text">Abrir o ELM327 Identifier</span>
+      </label>
+      <label class="item">
+        <input type="checkbox" data-key="scan">
+        <span class="item-text">Tocar em <strong>Scan</strong> e esperar a lista</span>
+      </label>
+      <label class="item">
+        <input type="checkbox" data-key="selecionar">
+        <span class="item-text">Selecionar o AD10<span class="sub">Nome parecido: "XTOOL", "AD10" ou o endereço MAC do dongle.</span></span>
+      </label>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="card-head">
+      <p class="eyebrow">03</p>
+      <h2>Durante o teste</h2>
+    </div>
+    <div class="items">
+      <label class="item">
+        <input type="checkbox" data-key="terminou">
+        <span class="item-text">Deixar rodar até o fim<span class="sub">Não fechar o app no meio.</span></span>
+      </label>
+      <label class="item">
+        <input type="checkbox" data-key="print">
+        <span class="item-text">Print da tela do resultado</span>
+      </label>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="card-head">
+      <p class="eyebrow">04</p>
+      <h2>Resultado do teste</h2>
+    </div>
+    <div class="verdicts" role="radiogroup" aria-label="Resultado">
+      <label class="verdict v-a">
+        <input type="radio" name="verdict" value="a">
+        <span class="item-text"><strong>"Not an ELM327" ou nenhum comando AT</strong><span class="sub">Hipótese confirmada: o AD10 não fala ELM327.</span></span>
+      </label>
+      <label class="verdict v-b">
+        <input type="radio" name="verdict" value="b">
+        <span class="item-text"><strong>Listou comandos AT respondidos</strong><span class="sub">O AD10 é ELM327 — o caminho vira ajuste no Car Scanner.</span></span>
+      </label>
+      <label class="verdict v-c">
+        <input type="radio" name="verdict" value="c">
+        <span class="item-text"><strong>Outra coisa</strong><span class="sub">Não abriu, não viu o dongle, travou.</span></span>
+      </label>
+    </div>
+    <label class="notes-label" for="notes">O que aconteceu (se precisar detalhar)</label>
+    <textarea id="notes" placeholder="Ex.: apareceu na lista, conectou e parou em 0 comandos respondidos."></textarea>
+    <p class="remember">Não configure o Car Scanner antes deste teste. Já foi tentado e falhou.</p>
+  </section>
+
+  <section class="card">
+    <div class="card-head">
+      <p class="eyebrow">05</p>
+      <h2>Ao voltar</h2>
+    </div>
+    <div class="items">
+      <label class="item">
+        <input type="checkbox" data-key="avisar">
+        <span class="item-text">Abrir o Claude e dizer o resultado<span class="sub">"Fiz o teste do ELM327, resultado foi ___".</span></span>
+      </label>
+      <label class="item">
+        <input type="checkbox" data-key="atualizar">
+        <span class="item-text">Atualizar o handoff e a memória com o veredito</span>
+      </label>
+    </div>
+  </section>
+
+  <div class="actions">
+    <button class="btn btn-primary" id="copy" type="button">Copiar resumo</button>
+    <button class="btn" id="export" type="button">Salvar resultado (.md)</button>
+    <button class="btn" id="reset" type="button">Limpar checklist</button>
+  </div>
+  <p class="status" id="status" role="status" aria-live="polite"></p>
+</main>
+
+<script>
+(function () {
+  var KEY = "elm327-checklist-v1";
+  var defaults = { items: {}, verdict: null, notes: "" };
+  var state = { items: {}, verdict: null, notes: "" };
+
+  try {
+    var raw = localStorage.getItem(KEY);
+    if (raw) {
+      var saved = JSON.parse(raw);
+      state.items = saved.items && typeof saved.items === "object" ? saved.items : {};
+      state.verdict = saved.verdict || null;
+      state.notes = typeof saved.notes === "string" ? saved.notes : "";
+    }
+  } catch (e) {}
+
+  var boxes = Array.prototype.slice.call(document.querySelectorAll("input[data-key]"));
+  var verdicts = Array.prototype.slice.call(document.querySelectorAll('input[name="verdict"]'));
+  var notes = document.getElementById("notes");
+  var bar = document.getElementById("barfill");
+  var track = bar.parentNode;
+  var countEl = document.getElementById("count");
+  var statusEl = document.getElementById("status");
+  var statusTimer = null;
+
+  function persist() {
+    try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {}
+  }
+
+  function scored() {
+    return boxes.filter(function (b) { return !b.hasAttribute("data-skip"); });
+  }
+
+  function updateProgress() {
+    var list = scored();
+    var done = list.filter(function (b) { return b.checked; }).length;
+    var total = list.length;
+    countEl.textContent = done + " de " + total;
+    bar.style.width = total ? (done / total) * 100 + "%" : "0%";
+    track.setAttribute("aria-valuenow", String(done));
+    track.setAttribute("aria-valuemax", String(total));
+  }
+
+  function render() {
+    boxes.forEach(function (b) {
+      b.checked = !!state.items[b.getAttribute("data-key")];
+    });
+    verdicts.forEach(function (r) {
+      r.checked = state.verdict === r.value;
+    });
+    notes.value = state.notes || "";
+    updateProgress();
+  }
+
+  boxes.forEach(function (b) {
+    b.addEventListener("change", function () {
+      state.items[b.getAttribute("data-key")] = b.checked;
+      persist();
+      updateProgress();
+    });
+  });
+
+  verdicts.forEach(function (r) {
+    r.addEventListener("change", function () {
+      if (r.checked) {
+        state.verdict = r.value;
+        persist();
+      }
+    });
+  });
+
+  notes.addEventListener("input", function () {
+    state.notes = notes.value;
+    persist();
+  });
+
+  function showStatus(msg) {
+    statusEl.textContent = msg;
+    statusEl.classList.add("show");
+    clearTimeout(statusTimer);
+    statusTimer = setTimeout(function () {
+      statusEl.classList.remove("show");
+    }, 3200);
+  }
+
+  var verdictText = {
+    a: "Not an ELM327 / nenhum comando AT (hipótese confirmada)",
+    b: "Listou comandos AT (o AD10 é ELM327)",
+    c: "Inconclusivo"
+  };
+
+  document.getElementById("copy").addEventListener("click", function () {
+    var list = scored();
+    var done = list.filter(function (b) { return b.checked; }).length;
+    var lines = [
+      "Teste ELM327 Identifier — XTOOL AD10 (Prisma 2015)",
+      "Checklist: " + done + " de " + list.length + " itens marcados",
+      "Resultado: " + (verdictText[state.verdict] || "não marcado")
+    ];
+    if (state.notes) lines.push("Observações: " + state.notes);
+    var text = lines.join("\n");
+
+    function ok() { showStatus("Resumo copiado. Cole no Claude."); }
+    function fallback() {
+      try {
+        var t = document.createElement("textarea");
+        t.value = text;
+        t.setAttribute("readonly", "");
+        t.style.position = "fixed";
+        t.style.opacity = "0";
+        document.body.appendChild(t);
+        t.select();
+        document.execCommand("copy");
+        document.body.removeChild(t);
+        ok();
+      } catch (e) {
+        showStatus("Não foi possível copiar automaticamente.");
+      }
+    }
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(ok, fallback);
+    } else {
+      fallback();
+    }
+  });
+
+  function itemLabel(input) {
+    var textEl = input.parentElement.querySelector(".item-text");
+    if (!textEl) return input.getAttribute("data-key") || "";
+    var clone = textEl.cloneNode(true);
+    clone.querySelectorAll(".sub, .chip").forEach(function (n) { n.remove(); });
+    return clone.textContent.replace(/\s+/g, " ").trim();
+  }
+
+  document.getElementById("export").addEventListener("click", function () {
+    var list = scored();
+    var done = list.filter(function (b) { return b.checked; }).length;
+    var today = new Date().toLocaleDateString("pt-BR");
+    var lines = [
+      "# Resultado do teste ELM327 — XTOOL AD10",
+      "",
+      "**Data:** " + today + "  ",
+      "**Veículo:** Chevrolet Prisma 2015  ",
+      "**Checklist:** " + done + " de " + list.length + " itens marcados  ",
+      "**Resultado:** " + (verdictText[state.verdict] || "não marcado"),
+      "",
+      "## Itens marcados",
+      ""
+    ];
+
+    document.querySelectorAll("section.card").forEach(function (section) {
+      var heading = section.querySelector("h2");
+      var inputs = Array.prototype.slice.call(section.querySelectorAll("input[data-key]"));
+      if (!inputs.length) return;
+      lines.push("### " + heading.textContent.trim(), "");
+      inputs.forEach(function (b) {
+        lines.push("- [" + (b.checked ? "x" : " ") + "] " + itemLabel(b));
+      });
+      lines.push("");
+    });
+
+    lines.push("## Observações", "", state.notes ? state.notes : "_(nenhuma)_", "");
+
+    var md = lines.join("\n");
+    try {
+      var blob = new Blob([md], { type: "text/markdown;charset=utf-8" });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement("a");
+      a.href = url;
+      a.download = "RESULTADO_TESTE_ELM327.md";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(function () { URL.revokeObjectURL(url); }, 1500);
+      showStatus("Arquivo salvo. Mova para E:\\Apps\\Multcar.");
+    } catch (e) {
+      showStatus("Não foi possível salvar. Use o botão Copiar resumo.");
+    }
+  });
+
+  var reset = document.getElementById("reset");
+  var armed = false;
+  var armTimer = null;
+
+  function disarm() {
+    armed = false;
+    clearTimeout(armTimer);
+    reset.textContent = "Limpar checklist";
+    reset.classList.remove("armed");
+  }
+
+  reset.addEventListener("click", function () {
+    if (!armed) {
+      armed = true;
+      reset.textContent = "Confirmar limpeza";
+      reset.classList.add("armed");
+      armTimer = setTimeout(disarm, 4000);
+      return;
+    }
+    disarm();
+    state = { items: {}, verdict: null, notes: "" };
+    try { localStorage.removeItem(KEY); } catch (e) {}
+    render();
+    showStatus("Checklist limpo.");
+  });
+
+  render();
+})();
+</script>

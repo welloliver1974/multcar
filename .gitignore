@@ -1,0 +1,23 @@
+# Node dependencies
+node_modules/
+
+# Android build outputs & Gradle cache
+.gradle/
+android/.gradle/
+android/app/build/
+android/build/
+
+# Backups and decompiled binary dumps (manter apenas local)
+backup_k2401/
+unpacked_apk/
+AD10EN_V2.0.3_C203.apk
+
+# Manter apenas o APK compilado final do projeto
+*.apk
+!Multcar_Pro_v1.0.apk
+
+# Logs e arquivos temporários
+*.log
+*.tmp
+.DS_Store
+Thumbs.db

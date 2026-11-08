@@ -1,0 +1,31 @@
+{
+  "name": "multcar-app",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Dashboard automotivo e scanner de diagnóstico para Chevrolet Prisma e central multimídia K2401 via XTOOL AD10",
+  "main": "index.ts",
+  "scripts": {
+    "test:protocol": "node dist/test_protocol.js",
+    "build": "tsc"
+  },
+  "keywords": [
+    "obd2",
+    "can-bus",
+    "xtool-ad10",
+    "prisma",
+    "k2401",
+    "ble",
+    "automotive"
+  ],
+  "author": "Multcar Team",
+  "license": "MIT",
+  "devDependencies": {
+    "@capacitor/cli": "^8.6.0",
+    "typescript": "^5.3.3"
+  },
+  "dependencies": {
+    "@capacitor-community/bluetooth-le": "^8.3.0",
+    "@capacitor/android": "^8.6.0",
+    "@capacitor/core": "^8.6.0"
+  }
+}
