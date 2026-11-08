@@ -22,13 +22,15 @@ Esse script faz tudo sozinho:
 
 ## 🔄 Como Atualizar Quando Sair Nova Versão
 
-Sempre que fizermos alterações no projeto e enviarmos para o GitHub, basta entrar na VPS e rodar:
+Sempre que fizermos alterações no projeto e enviarmos para o GitHub, basta digitar diretamente no terminal da VPS:
 
 ```bash
-cd /opt/multcar && bash deploy.sh
+multcar att
 ```
 
-O script puxa os novos commits com `git pull` e atualiza a aplicação sem você precisar configurar nada manualmente.
+O comando busca as novidades no GitHub, reconstrói os containers Docker sem cache e atualiza o PWA e o download do APK automaticamente!
+
+*(Caso ainda não tenha o comando instalado, instale com: `curl -fsSL https://raw.githubusercontent.com/welloliver1974/multcar/main/install-cli.sh | bash`)*
 
 ---
 

@@ -14,3 +14,4 @@ echo "✅ Pronto! O comando 'multcar' já está instalado no seu terminal."
 echo "Agora você só precisa digitar:"
 echo "   multcar att"
 echo ""
+
