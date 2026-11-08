@@ -84,3 +84,4 @@ sudo certbot --nginx -d multcar.seudominio.com
 ## 📱 Links Resultantes na sua VPS:
 * **Dashboard PWA:** `https://multcar.seudominio.com`
 * **Download direto do APK:** `https://multcar.seudominio.com/Multcar_Pro_v1.0.apk`
+

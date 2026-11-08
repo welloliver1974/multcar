@@ -96,3 +96,4 @@ echo -e "1. Aponte seu domínio/subdomínio para o IP desta VPS."
 echo -e "2. Use o Nginx Proxy Manager, Caddy ou Certbot para gerar o certificado SSL gratuito:"
 echo -e "   ${CYAN}certbot --nginx -d multcar.seudominio.com${NC}"
 echo -e "3. Ou pelo Cloudflare Tunnel (Tunnel -> Public Hostname -> localhost:3030).\n"
+

@@ -16,3 +16,4 @@ COPY Multcar_Pro_v1.0.apk /usr/share/nginx/html/
 EXPOSE 80
 
 CMD ["nginx", "-g", "daemon off;"]
+

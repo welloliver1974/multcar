@@ -373,5 +373,22 @@ Para garantir o teste perfeito no Chevrolet Prisma:
 4. **Toque Único:** Abra o Multcar Pro e toque em **"📡 Conectar"**. O app localiza o AD10, conecta automaticamente e inicia o fluxo de telemetria em tempo real.
 
 ---
-*Relatório atualizado em 08/nov/2026 com engenharia reversa completa da conexão BLE, PWA e compilação final.*
+
+## 17. Deploy Automatizado na VPS (Docker & Nginx)
+
+Para garantir hospedagem permanente e independente com suporte a HTTPS e download direto do APK:
+
+* **Repositório Público no GitHub:** [https://github.com/welloliver1974/multcar](https://github.com/welloliver1974/multcar)
+* **Comando Único de Instalação na VPS:**
+  ```bash
+  curl -fsSL https://raw.githubusercontent.com/welloliver1974/multcar/main/deploy.sh | bash
+  ```
+* **Infraestrutura Conteinerizada:**
+  * `Dockerfile`: Container baseado em `nginx:alpine` (~20MB) com compressão gzip e cabeçalhos de controle de cache para PWA.
+  * `docker-compose.yml`: Serviço persistente mapeado na porta `3030` (`restart: unless-stopped`).
+  * `deploy.sh`: Script idempotente que atualiza o código via Git e reinicia o serviço com zero downtime.
+  * Distribuição do instalador nativo diretamente em: `http://IP_DA_VPS:3030/Multcar_Pro_v1.0.apk`.
+
+---
+*Relatório atualizado em 08/nov/2026 com engenharia reversa completa da conexão BLE, PWA, compilação final e deploy VPS.*
 

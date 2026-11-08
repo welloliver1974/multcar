@@ -34,13 +34,23 @@
 | :--- | :--- |
 | [`E:\Apps\Multcar\Multcar_Pro_v1.0.apk`](file:///E:/Apps/Multcar/Multcar_Pro_v1.0.apk) | APK Android nativo atualizado (4.25 MB) |
 | [`E:\Apps\Multcar\index.html`](file:///E:/Apps/Multcar/index.html) | Dashboard PWA standalone |
+| [`E:\Apps\Multcar\deploy.sh`](file:///E:/Apps/Multcar/deploy.sh) | Script de deploy automatizado na VPS |
+| [`E:\Apps\Multcar\docker-compose.yml`](file:///E:/Apps/Multcar/docker-compose.yml) | Orquestração Docker na porta 3030 |
 | [`E:\Apps\Multcar\server.js`](file:///E:/Apps/Multcar/server.js) | Servidor HTTP local (Porta 3030) |
 | [`E:\Apps\Multcar\RELATORIO_COMPLETO_PROJETO_MULTCAR.md`](file:///E:/Apps/Multcar/RELATORIO_COMPLETO_PROJETO_MULTCAR.md) | Relatório técnico completo de todo o projeto |
 | [`E:\Apps\Multcar\ESPECIFICACAO_PROTOCOLO_XTOOL_AD10.md`](file:///E:/Apps/Multcar/ESPECIFICACAO_PROTOCOLO_XTOOL_AD10.md) | Especificação reversa do protocolo binário CAN |
 
 ---
 
-## 3. Próximo Passo do Usuário
+## 3. Deploy Rápido na VPS Linux
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/welloliver1974/multcar/main/deploy.sh | bash
+```
+
+---
+
+## 4. Próximo Passo do Usuário
 
 1. **Testar conexão BLE no carro:**
    - Plugar o AD10 na porta OBD2 do Prisma e ligar a chave (ignição).
