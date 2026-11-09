@@ -19,6 +19,7 @@ AD10EN_V2.0.3_C203.apk
 # Logs e arquivos temporários
 *.log
 *.tmp
+scratch/
 .DS_Store
 Thumbs.db
 

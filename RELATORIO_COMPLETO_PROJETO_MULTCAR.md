@@ -49,6 +49,14 @@ Para desvendar a comunicação, o APK oficial `AD10EN_V2.0.3_C203.apk` (60.6 MB)
 
 2. **Biblioteca Nativa C/C++ (`libobdcore.so`):**
    * Mapeamento de métodos JNI: `Java_com_diagnosis_obdcore_ObdImplment_nativeSendReceive`, `nativeInitDevice`, `nativeGetValueByPid`, `nativeGetTroubleCode`.
+   * **Descoberta do Hardware Multiplexer & Transceptor CAN:** A análise binária da biblioteca revelou as classes C++ `CAD10Link` e `CAD10Prot`.
+   * **String Nativa de Configuração do Barramento (Offset `0x4d70f`):**
+     `CAN,std,0,pin:6+14,07df/07e0/07f0,period:0/2/200/80/1000\r\n`
+     Esta string comanda os relés internos do AD10 para comutar os pinos 6 e 14 do conector OBD2 (CAN-H e CAN-L) em modo 11-bit standard a 500 kbps com filtros para o Broadcast `07DF` e módulo ECM `07E0`.
+   * **Comandos de Controle do Microcontrolador (MCU):**
+     - `[0x81, 0x00, 0x81]`: Wake-up e inicialização da MCU do dongle.
+     - `[0x82, ... ]`: Configuração de taxa e filtros de protocolo.
+     - `[0x83, 0x00, 0x83]`: Leitura direta da tensão da bateria medida pelo hardware interno.
 
 ---
 
@@ -65,19 +73,28 @@ O dongle utiliza a arquitetura clássica da Nordic Semiconductor (NUS):
 | **CCCD Descriptor** | `00002902-0000-1000-8000-00805f9b34fb` | Habilitado escrevendo `[0x01, 0x00]` |
 | **Tamanho do Chunk** | `20 bytes` | Fragmentação obrigatória para respeito ao BLE MTU |
 
-### 4.2. Estrutura do Frame CAN (Prisma 1.4 - Barramento 11-bit / 500k)
-Descompilação do método `com.xtooltech.ad10.Utils.comboCanCommand`:
+### 4.2. Estrutura do Frame CAN Completo (Padrão ISO 15765-4 / GM Delphi)
+A ECU Delphi do Chevrolet Prisma 1.4 SPE/4 Flex descarta frames curtos com tamanho inferior a 8 bytes. O frame transmitido deve conter DLC=8 e preenchimento com `0x55`:
 
 ```
-+------------+------------+------------+------------+------------+------------+
-| Byte 0     | Byte 1     | Byte 2     | Byte 3     | Byte 4     | Byte 5     |
-| 0x08       | 0x07       | 0xDF       | Tamanho    | Modo OBD   | PID OBD    |
-+------------+------------+------------+------------+------------+------------+
++------------+------------+------------+------------+------------+------------+------------+------------+------------+------------+------------+
+| Byte 0     | Byte 1     | Byte 2     | Byte 3     | Byte 4     | Byte 5     | Byte 6     | Byte 7     | Byte 8     | Byte 9     | Byte 10    |
+| DLC        | CAN ID High| CAN ID Low | ISO-TP Len | Mode       | PID        | Pad 1      | Pad 2      | Pad 3      | Pad 4      | Pad 5      |
+| 0x08       | 0x07       | 0xDF       | 0x02       | 0x01       | PID        | 0x55       | 0x55       | 0x55       | 0x55       | 0x55       |
++------------+------------+------------+------------+------------+------------+------------+------------+------------+------------+------------+
 ```
 
-* `0x08`: Flag de cabeçalho CAN standard.
+* `0x08`: DLC fixo (8 bytes de dados CAN).
 * `0x07, 0xDF`: Identificador CAN Broadcast padrão OBD2 (`0x07DF`).
-* `Tamanho`: Quantidade de bytes da carga útil (`0x02` para consulta Mode 01).
+* `0x02`: ISO-TP Single Frame indicando 2 bytes de dados úteis (`Modo` + `PID`).
+* `0x55`: Bytes de preenchimento padrão ISO 15765-4 para completar os 8 bytes de dados.
+
+### 4.3. Monitoramento em Tempo Real (Barra de Telemetria Integrada)
+Adicionado display de monitoramento dinâmico na tela do app:
+- **CAN Status:** Monitora os estados `Aguardando` ➔ `Configurando...` ➔ `CAN 500k OK` ➔ `Ativo`.
+- **Contador TX:** Mostra em tempo real a quantidade de comandos transmitidos.
+- **Contador RX:** Mostra o número de respostas recebidas do veículo.
+- **RX Hex:** Amostragem em tempo real dos últimos bytes brutos retornados pelo dongle.
 * `Modo`: `0x01` para dados em tempo real.
 * `PID`: Sensor solicitado (ex: `0x0C` para RPM, `0x05` para Temperatura da Água).
 

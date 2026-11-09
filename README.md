@@ -61,3 +61,4 @@ Outros comandos úteis:
 * 🛰️ [Handoff e Próximos Passos](PROXIMO_PASSO_OBD2_CAR_SCANNER.md)
 * 📖 [Guia de Deploy na VPS](GUIA_DEPLOY_VPS.md)
 * 🔬 [Especificação do Protocolo Binário CAN AD10](ESPECIFICACAO_PROTOCOLO_XTOOL_AD10.md)
+

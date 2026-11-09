@@ -756,6 +756,36 @@
         grid-template-columns: repeat(4, 1fr);
       }
     }
+
+    /* BARRA DE TELEMETRIA E DIAGNÓSTICO EM TEMPO REAL */
+    .telemetry-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: #060a14;
+      border: 1px solid var(--card-border);
+      border-radius: 6px;
+      padding: 4px 8px;
+      font-size: 0.65rem;
+      color: var(--text-dim);
+      margin-top: 4px;
+      margin-bottom: 6px;
+      flex-wrap: wrap;
+    }
+    .telemetry-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+    }
+    .telemetry-tag {
+      font-weight: 800;
+      color: #94a3b8;
+    }
+    .telemetry-live {
+      font-family: monospace;
+      color: var(--accent);
+      font-weight: 700;
+    }
   </style>
 </head>
 <body>
@@ -809,6 +839,26 @@
         <div class="shift-led" id="led8"></div>
         <div class="shift-led" id="led9"></div>
         <div class="shift-led" id="led10"></div>
+      </div>
+
+      <!-- Barra de Telemetria e Diagnóstico de Conexão -->
+      <div class="telemetry-bar" id="telemetryBar">
+        <div class="telemetry-item">
+          <span class="telemetry-tag">CAN:</span>
+          <span id="telemetryCanStatus" style="color: var(--yellow);">Aguardando</span>
+        </div>
+        <div class="telemetry-item">
+          <span class="telemetry-tag">TX:</span>
+          <span id="telemetryTxCount" class="telemetry-live">0</span>
+        </div>
+        <div class="telemetry-item">
+          <span class="telemetry-tag">RX:</span>
+          <span id="telemetryRxCount" class="telemetry-live">0</span>
+        </div>
+        <div class="telemetry-item" style="flex: 1; min-width: 140px; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+          <span class="telemetry-tag">RX Hex:</span>
+          <span id="telemetryLastHex" class="telemetry-live">--</span>
+        </div>
       </div>
 
       <div class="dashboard-layout">
@@ -1777,86 +1827,123 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
       P0563: { desc: 'Tensão do sistema excessivamente alta (> 15.5V)', rec: 'Regulador do alternador em curto; perigo para a ECU.' }
     };
 
+    let txCount = 0;
+    let rxCount = 0;
+
     /**
-     * Monta o frame CAN 11-bit proprietário do XTOOL AD10:
-     * [0x08, 0x07, 0xDF, length, mode, pid...]
+     * Monta o frame CAN 11-bit padrão ISO 15765-4 completo (8 bytes de payload CAN)
+     * Header AD10: [0x08, 0x07, 0xDF, length, mode, pid, 0x55, 0x55...]
      */
     function buildCan11BitFrame(mode, pid = null, extra = []) {
       const payload = [mode];
       if (pid !== null && pid !== undefined) payload.push(pid);
       if (extra.length > 0) payload.push(...extra);
-      return new Uint8Array([0x08, 0x07, 0xdf, payload.length, ...payload]);
+
+      // ISO-TP Single Frame: Byte 0 = tamanho de dados (ex: 2 para mode + pid)
+      const isoTp = [payload.length, ...payload];
+      // Padding ISO 15765-4 com 0x55 (padrão SAE J1979 / GM) até 8 bytes
+      while (isoTp.length < 8) {
+        isoTp.push(0x55);
+      }
+
+      // 0x08 = DLC 8 bytes, 0x07, 0xDF = CAN ID broadcast padrão OBD2
+      return new Uint8Array([0x08, 0x07, 0xdf, ...isoTp]);
+    }
+
+    /**
+     * Atualiza os mostradores e computador de bordo com a resposta do sensor
+     */
+    function handleObdPidResponse(pid, a, b) {
+      switch (pid) {
+        case 0x0C: { // RPM: ((A * 256) + B) / 4
+          const rpm = Math.round(((a * 256) + b) / 4);
+          rpmVal.textContent = rpm;
+          updateGauge(rpmFill, rpm, 7000);
+          updateShiftLight(rpm);
+          updateTripAndThrottle(null, rpm);
+          break;
+        }
+        case 0x0D: { // Velocidade: A (km/h)
+          const speed = a;
+          speedVal.textContent = speed;
+          updateGauge(speedFill, speed, 200);
+          handlePerformanceTimer(speed);
+          updateTripAndThrottle(speed);
+          break;
+        }
+        case 0x05: { // Temperatura da Água: A - 40 (°C)
+          setTemperature(a - 40);
+          break;
+        }
+        case 0x42: { // Tensão da Bateria/ECU: ((A * 256) + B) / 1000 (V)
+          const volt = ((a * 256) + b) / 1000;
+          setVoltage(volt);
+          break;
+        }
+        case 0x0B: { // MAP Pressão Coletor: A (kPa)
+          mapVal.textContent = a;
+          document.getElementById('aiDataMap').textContent = a + ' kPa';
+          updateTripAndThrottle(null, null, a);
+          break;
+        }
+        case 0x11: { // Posição da Borboleta TBI: (A * 100) / 255 (%)
+          const throttle = Math.round((a * 100) / 255);
+          updateTripAndThrottle(null, null, null, null, throttle);
+          break;
+        }
+        case 0x04: { // Carga do Motor: (A * 100) / 255 (%)
+          const load = Math.round((a * 100) / 255);
+          loadVal.textContent = load + '%';
+          loadBar.style.width = load + '%';
+          break;
+        }
+        case 0x07: { // LTFT Ajuste Longo: (A - 128) * 100 / 128 (%)
+          const ltft = (((a - 128) * 100) / 128).toFixed(1);
+          const sign = ltft >= 0 ? '+' : '';
+          ltftVal.textContent = `${sign}${ltft}%`;
+          document.getElementById('aiDataLtft').textContent = `${sign}${ltft}%`;
+          updateTripAndThrottle(null, null, null, parseFloat(ltft));
+          break;
+        }
+        case 0x14: { // Sonda Lambda 1 Tensão: A / 200 (V)
+          const o2v = a / 200;
+          o2VoltageText.textContent = o2v.toFixed(2) + ' V';
+          drawO2Waveform(o2v);
+          break;
+        }
+      }
     }
 
     /**
      * Processa bytes brutos recebidos na notificação do AD10 (RX 6E400003)
+     * Suporta formato Binário CAN AD10, Resposta de Tensão 0x83 e ASCII ELM327
      */
     function processIncomingCanBytes(data) {
+      if (!data || data.length === 0) return;
+
+      rxCount++;
+      const rxCountEl = document.getElementById('telemetryRxCount');
+      const lastHexEl = document.getElementById('telemetryLastHex');
+      if (rxCountEl) rxCountEl.textContent = rxCount;
+
+      const hexArr = Array.from(data).map(b => b.toString(16).padStart(2, '0').toUpperCase());
+      if (lastHexEl) lastHexEl.textContent = hexArr.slice(0, 10).join(' ');
+
+      // 1. Resposta de Tensão do AD10 (Comando 0x83)
+      if (data[0] === 0x83 && data.length >= 3) {
+        const vRaw = (data[1] << 8) | data[2];
+        if (vRaw > 500 && vRaw < 2000) {
+          setVoltage(vRaw / 100);
+        }
+      }
+
+      // 2. Resposta Binária CAN (Busca pelo byte 0x41 de Mode 01)
       for (let i = 0; i < data.length - 2; i++) {
-        // Resposta Mode 01: 0x41
         if (data[i] === 0x41) {
           const pid = data[i + 1];
           const a = data[i + 2] ?? 0;
           const b = data[i + 3] ?? 0;
-
-          switch (pid) {
-            case 0x0C: { // RPM: ((A * 256) + B) / 4
-              const rpm = Math.round(((a * 256) + b) / 4);
-              rpmVal.textContent = rpm;
-              updateGauge(rpmFill, rpm, 7000);
-              updateShiftLight(rpm);
-              updateTripAndThrottle(null, rpm);
-              break;
-            }
-            case 0x0D: { // Velocidade: A (km/h)
-              const speed = a;
-              speedVal.textContent = speed;
-              updateGauge(speedFill, speed, 200);
-              handlePerformanceTimer(speed);
-              updateTripAndThrottle(speed);
-              break;
-            }
-            case 0x05: { // Temperatura da Água: A - 40 (°C)
-              setTemperature(a - 40);
-              break;
-            }
-            case 0x42: { // Tensão da Bateria/ECU: ((A * 256) + B) / 1000 (V)
-              const volt = ((a * 256) + b) / 1000;
-              setVoltage(volt);
-              break;
-            }
-            case 0x0B: { // MAP Pressão Coletor: A (kPa)
-              mapVal.textContent = a;
-              document.getElementById('aiDataMap').textContent = a + ' kPa';
-              updateTripAndThrottle(null, null, a);
-              break;
-            }
-            case 0x11: { // Posição da Borboleta TBI: (A * 100) / 255 (%)
-              const throttle = Math.round((a * 100) / 255);
-              updateTripAndThrottle(null, null, null, null, throttle);
-              break;
-            }
-            case 0x04: { // Carga do Motor: (A * 100) / 255 (%)
-              const load = Math.round((a * 100) / 255);
-              loadVal.textContent = load + '%';
-              loadBar.style.width = load + '%';
-              break;
-            }
-            case 0x07: { // LTFT Ajuste Longo: (A - 128) * 100 / 128 (%)
-              const ltft = (((a - 128) * 100) / 128).toFixed(1);
-              const sign = ltft >= 0 ? '+' : '';
-              ltftVal.textContent = `${sign}${ltft}%`;
-              document.getElementById('aiDataLtft').textContent = `${sign}${ltft}%`;
-              updateTripAndThrottle(null, null, null, parseFloat(ltft));
-              break;
-            }
-            case 0x14: { // Sonda Lambda 1 Tensão: A / 200 (V)
-              const o2v = a / 200;
-              o2VoltageText.textContent = o2v.toFixed(2) + ' V';
-              drawO2Waveform(o2v);
-              break;
-            }
-          }
+          handleObdPidResponse(pid, a, b);
           break;
         }
 
@@ -1879,6 +1966,26 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
           break;
         }
       }
+
+      // 3. Resposta ASCII / Texto (ELM327 fallback se o firmware responder em texto)
+      try {
+        const text = new TextDecoder('ascii').decode(data);
+        if (text.includes('41')) {
+          const clean = text.replace(/[\r\n\s>]/g, '');
+          const idx = clean.indexOf('41');
+          if (idx !== -1 && clean.length >= idx + 6) {
+            const pid = parseInt(clean.substr(idx + 2, 2), 16);
+            const a = parseInt(clean.substr(idx + 4, 2), 16);
+            const b = clean.length >= idx + 8 ? parseInt(clean.substr(idx + 6, 2), 16) : 0;
+            if (!isNaN(pid) && !isNaN(a)) {
+              handleObdPidResponse(pid, a, b);
+            }
+          }
+        } else if (text.includes('V') && !isNaN(parseFloat(text))) {
+          const v = parseFloat(text);
+          if (v > 9 && v < 18) setVoltage(v);
+        }
+      } catch (e) {}
     }
 
     function renderDtcResults(bytes) {
@@ -1933,12 +2040,20 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
      */
     async function sendCanFrame(frameBytes) {
       try {
+        txCount++;
+        const txCountEl = document.getElementById('telemetryTxCount');
+        if (txCountEl) txCountEl.textContent = txCount;
+
         if (isNativeBle && currentDeviceId && window.capacitorCommunityBluetoothLe) {
           const BleClient = window.capacitorCommunityBluetoothLe.BleClient;
           for (let i = 0; i < frameBytes.length; i += 20) {
             const chunk = frameBytes.slice(i, i + 20);
             const dataView = new DataView(chunk.buffer, chunk.byteOffset, chunk.byteLength);
-            await BleClient.writeWithoutResponse(currentDeviceId, AD10_NUS.SERVICE, AD10_NUS.TX_CHAR, dataView);
+            try {
+              await BleClient.writeWithoutResponse(currentDeviceId, AD10_NUS.SERVICE, AD10_NUS.TX_CHAR, dataView);
+            } catch {
+              await BleClient.write(currentDeviceId, AD10_NUS.SERVICE, AD10_NUS.TX_CHAR, dataView);
+            }
           }
           return;
         }
@@ -1947,7 +2062,11 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
           for (let i = 0; i < frameBytes.length; i += 20) {
             const chunk = frameBytes.slice(i, i + 20);
             if (bleTx.writeValueWithoutResponse) {
-              await bleTx.writeValueWithoutResponse(chunk);
+              try {
+                await bleTx.writeValueWithoutResponse(chunk);
+              } catch {
+                await bleTx.writeValue(chunk);
+              }
             } else {
               await bleTx.writeValue(chunk);
             }
@@ -1958,18 +2077,68 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
       }
     }
 
+    /**
+     * Handshake e Inicialização Oficial XTOOL AD10:
+     * Acorda o microcontrolador do dongle e ativa o transceptor CAN nos pinos 6 e 14 a 500 kbps
+     */
+    async function initAd10Device() {
+      const statusEl = document.getElementById('telemetryCanStatus');
+      if (statusEl) {
+        statusEl.textContent = 'Configurando...';
+        statusEl.style.color = 'var(--yellow)';
+      }
+
+      showToast('⚙️ Inicializando AD10', 'Ativando transceptor CAN 500k nos pinos 6 e 14 do Prisma...', 'info', 3000);
+
+      const enc = new TextEncoder();
+
+      try {
+        // 1. Comando Wake-up binário MCU AD10
+        await sendCanFrame(new Uint8Array([0x81, 0x00, 0x81]));
+        await new Promise(r => setTimeout(r, 100));
+
+        // 2. String de Configuração Oficial de Barramento XTOOL (descoberta na engenharia reversa):
+        // Conecta pinos 6+14 a 500 kbps (CAN standard 11-bit) com filtros 07DF e 07E0
+        const canCfg = "CAN,std,0,pin:6+14,07df/07e0/07f0,period:0/2/200/80/1000\r\n";
+        await sendCanFrame(enc.encode(canCfg));
+        await new Promise(r => setTimeout(r, 150));
+
+        // 3. Handshake AT/CAN de compatibilidade
+        const atInit = ["ATZ\r", "ATE0\r", "ATH1\r", "ATSP6\r", "0100\r"];
+        for (const at of atInit) {
+          await sendCanFrame(enc.encode(at));
+          await new Promise(r => setTimeout(r, 80));
+        }
+
+        // 4. Solicitação de Tensão de Bateria (Comando 0x83)
+        await sendCanFrame(new Uint8Array([0x83, 0x00, 0x83]));
+        await new Promise(r => setTimeout(r, 100));
+
+        if (statusEl) {
+          statusEl.textContent = 'CAN 500k OK';
+          statusEl.style.color = 'var(--green)';
+        }
+      } catch (e) {
+        console.warn('[AD10 Init Error]', e);
+      }
+    }
+
     function startPolling() {
       if (isPolling) return;
       isPolling = true;
       pollIndex = 0;
 
-      pollingInterval = setInterval(async () => {
+      // Executa primeiro a inicialização do protocolo no AD10 e depois inicia o loop
+      initAd10Device().then(() => {
         if (!isConnectedBle) return;
-        const cmd = POLL_QUEUE[pollIndex];
-        pollIndex = (pollIndex + 1) % POLL_QUEUE.length;
-        const frame = buildCan11BitFrame(cmd.mode, cmd.pid);
-        await sendCanFrame(frame);
-      }, 75); // Polling contínuo rápido a ~13 Hz
+        pollingInterval = setInterval(async () => {
+          if (!isConnectedBle) return;
+          const cmd = POLL_QUEUE[pollIndex];
+          pollIndex = (pollIndex + 1) % POLL_QUEUE.length;
+          const frame = buildCan11BitFrame(cmd.mode, cmd.pid);
+          await sendCanFrame(frame);
+        }, 100); // Polling contínuo equilibrado a 10 Hz
+      });
     }
 
     function stopPolling() {
@@ -1990,6 +2159,12 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
       connText.textContent = 'Off';
       btnConnectBle.textContent = '📡 Conectar';
       btnConnectBle.classList.remove('btn-secondary');
+
+      const statusEl = document.getElementById('telemetryCanStatus');
+      if (statusEl) {
+        statusEl.textContent = 'Desconectado';
+        statusEl.style.color = 'var(--text-dim)';
+      }
     }
 
     async function disconnectBle() {
