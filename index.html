@@ -842,7 +842,7 @@
       </div>
 
       <!-- Barra de Telemetria e Diagnóstico de Conexão -->
-      <div class="telemetry-bar" id="telemetryBar">
+      <div class="telemetry-bar" id="telemetryBar" onclick="showBleDiagnosticInfo()" style="cursor: pointer;" title="Toque para ver diagnóstico BLE completo">
         <div class="telemetry-item">
           <span class="telemetry-tag">CAN:</span>
           <span id="telemetryCanStatus" style="color: var(--yellow);">Aguardando</span>
@@ -854,6 +854,10 @@
         <div class="telemetry-item">
           <span class="telemetry-tag">RX:</span>
           <span id="telemetryRxCount" class="telemetry-live">0</span>
+        </div>
+        <div class="telemetry-item">
+          <span class="telemetry-tag">Canais:</span>
+          <span id="telemetryChannels" class="telemetry-live" style="color: #38bdf8;">--</span>
         </div>
         <div class="telemetry-item" style="flex: 1; min-width: 140px; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
           <span class="telemetry-tag">RX Hex:</span>
@@ -1773,9 +1777,15 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
     // =========================================================================
     const AD10_NUS = {
       SERVICE: '6e400001-b5a3-f393-e0a9-e50e24dcca9e',
-      TX_CHAR: '6e400004-b5a3-f393-e0a9-e50e24dcca9e', // Envio (Celular -> AD10)
-      RX_CHAR: '6e400003-b5a3-f393-e0a9-e50e24dcca9e'  // Notificações (AD10 -> Celular)
+      CHAR_0003: '6e400003-b5a3-f393-e0a9-e50e24dcca9e',
+      CHAR_0004: '6e400004-b5a3-f393-e0a9-e50e24dcca9e',
+      TX_CHAR: '6e400004-b5a3-f393-e0a9-e50e24dcca9e',
+      RX_CHAR: '6e400003-b5a3-f393-e0a9-e50e24dcca9e'
     };
+
+    let writeCharacteristics = [];
+    let notifyCharacteristics = [];
+    let bleDiscoverySummary = 'Não inicializado';
 
     let bleDevice = null;
     let bleServer = null;
@@ -1915,10 +1925,30 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
     }
 
     /**
-     * Processa bytes brutos recebidos na notificação do AD10 (RX 6E400003)
+     * Extrai com segurança um Uint8Array de qualquer retorno BLE (DataView, ArrayBuffer, TypedArray)
+     */
+    function safeExtractBytes(val) {
+      if (!val) return new Uint8Array(0);
+      if (val instanceof DataView) {
+        return new Uint8Array(val.buffer, val.byteOffset, val.byteLength);
+      }
+      if (val instanceof Uint8Array) {
+        return val;
+      }
+      if (val.buffer) {
+        return new Uint8Array(val.buffer, val.byteOffset || 0, val.byteLength || val.buffer.byteLength);
+      }
+      if (Array.isArray(val)) {
+        return new Uint8Array(val);
+      }
+      return new Uint8Array(0);
+    }
+
+    /**
+     * Processa bytes brutos recebidos em qualquer canal de notificação do AD10 (RX 0003 ou 0004)
      * Suporta formato Binário CAN AD10, Resposta de Tensão 0x83 e ASCII ELM327
      */
-    function processIncomingCanBytes(data) {
+    function processIncomingCanBytes(data, sourceChar = '') {
       if (!data || data.length === 0) return;
 
       rxCount++;
@@ -1927,9 +1957,16 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
       if (rxCountEl) rxCountEl.textContent = rxCount;
 
       const hexArr = Array.from(data).map(b => b.toString(16).padStart(2, '0').toUpperCase());
-      if (lastHexEl) lastHexEl.textContent = hexArr.slice(0, 10).join(' ');
+      if (lastHexEl) lastHexEl.textContent = hexArr.slice(0, 8).join(' ');
 
-      // 1. Resposta de Tensão do AD10 (Comando 0x83)
+      // Atualiza status se estava configurando
+      const statusEl = document.getElementById('telemetryCanStatus');
+      if (statusEl && statusEl.textContent !== 'Ativo') {
+        statusEl.textContent = 'Ativo';
+        statusEl.style.color = 'var(--green)';
+      }
+
+      // 1. Resposta de Tensão da MCU AD10 (Comando 0x83)
       if (data[0] === 0x83 && data.length >= 3) {
         const vRaw = (data[1] << 8) | data[2];
         if (vRaw > 500 && vRaw < 2000) {
@@ -2036,7 +2073,7 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
 
     /**
      * Transmite pacote fragmentado em blocos de 20 bytes (MTU padrão BLE GATT)
-     * Suporta tanto APK Nativo (Capacitor) quanto PWA (Web Bluetooth)
+     * Garante entrega enviando para os canais de escrita mapeados (ou ambos 0004 e 0003)
      */
     async function sendCanFrame(frameBytes) {
       try {
@@ -2046,13 +2083,21 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
 
         if (isNativeBle && currentDeviceId && window.capacitorCommunityBluetoothLe) {
           const BleClient = window.capacitorCommunityBluetoothLe.BleClient;
-          for (let i = 0; i < frameBytes.length; i += 20) {
-            const chunk = frameBytes.slice(i, i + 20);
-            const dataView = new DataView(chunk.buffer, chunk.byteOffset, chunk.byteLength);
-            try {
-              await BleClient.writeWithoutResponse(currentDeviceId, AD10_NUS.SERVICE, AD10_NUS.TX_CHAR, dataView);
-            } catch {
-              await BleClient.write(currentDeviceId, AD10_NUS.SERVICE, AD10_NUS.TX_CHAR, dataView);
+          const targets = writeCharacteristics.length > 0 
+            ? writeCharacteristics 
+            : [AD10_NUS.CHAR_0004, AD10_NUS.CHAR_0003];
+
+          for (const charUuid of targets) {
+            for (let i = 0; i < frameBytes.length; i += 20) {
+              const chunk = frameBytes.slice(i, i + 20);
+              const dataView = new DataView(chunk.buffer, chunk.byteOffset, chunk.byteLength);
+              try {
+                await BleClient.writeWithoutResponse(currentDeviceId, AD10_NUS.SERVICE, charUuid, dataView);
+              } catch {
+                try {
+                  await BleClient.write(currentDeviceId, AD10_NUS.SERVICE, charUuid, dataView);
+                } catch {}
+              }
             }
           }
           return;
@@ -2061,14 +2106,14 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
         if (bleTx) {
           for (let i = 0; i < frameBytes.length; i += 20) {
             const chunk = frameBytes.slice(i, i + 20);
-            if (bleTx.writeValueWithoutResponse) {
-              try {
+            try {
+              if (bleTx.writeValueWithoutResponse) {
                 await bleTx.writeValueWithoutResponse(chunk);
-              } catch {
+              } else {
                 await bleTx.writeValue(chunk);
               }
-            } else {
-              await bleTx.writeValue(chunk);
+            } catch {
+              try { await bleTx.writeValue(chunk); } catch {}
             }
           }
         }
@@ -2088,16 +2133,16 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
         statusEl.style.color = 'var(--yellow)';
       }
 
-      showToast('⚙️ Inicializando AD10', 'Ativando transceptor CAN 500k nos pinos 6 e 14 do Prisma...', 'info', 3000);
+      showToast('⚙️ Inicializando AD10', 'Ativando transceptor CAN 500k nos pinos 6 e 14 do Prisma...', 'info', 2500);
 
       const enc = new TextEncoder();
 
       try {
         // 1. Comando Wake-up binário MCU AD10
         await sendCanFrame(new Uint8Array([0x81, 0x00, 0x81]));
-        await new Promise(r => setTimeout(r, 100));
+        await new Promise(r => setTimeout(r, 120));
 
-        // 2. String de Configuração Oficial de Barramento XTOOL (descoberta na engenharia reversa):
+        // 2. String de Configuração Oficial de Barramento XTOOL (descoberta na engenharia reversa de libobdcore.so):
         // Conecta pinos 6+14 a 500 kbps (CAN standard 11-bit) com filtros 07DF e 07E0
         const canCfg = "CAN,std,0,pin:6+14,07df/07e0/07f0,period:0/2/200/80/1000\r\n";
         await sendCanFrame(enc.encode(canCfg));
@@ -2110,7 +2155,7 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
           await new Promise(r => setTimeout(r, 80));
         }
 
-        // 4. Solicitação de Tensão de Bateria (Comando 0x83)
+        // 4. Solicitação de Tensão de Bateria (Comando 0x83 para MCU do AD10)
         await sendCanFrame(new Uint8Array([0x83, 0x00, 0x83]));
         await new Promise(r => setTimeout(r, 100));
 
@@ -2131,13 +2176,14 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
       // Executa primeiro a inicialização do protocolo no AD10 e depois inicia o loop
       initAd10Device().then(() => {
         if (!isConnectedBle) return;
+        // Intervalo inicial de 150ms para respeitar a taxa de amostragem da ECU GM
         pollingInterval = setInterval(async () => {
           if (!isConnectedBle) return;
           const cmd = POLL_QUEUE[pollIndex];
           pollIndex = (pollIndex + 1) % POLL_QUEUE.length;
           const frame = buildCan11BitFrame(cmd.mode, cmd.pid);
           await sendCanFrame(frame);
-        }, 100); // Polling contínuo equilibrado a 10 Hz
+        }, 150);
       });
     }
 
@@ -2154,6 +2200,8 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
       isConnectedBle = false;
       isNativeBle = false;
       currentDeviceId = null;
+      writeCharacteristics = [];
+      notifyCharacteristics = [];
       stopPolling();
       connDot.className = 'dot';
       connText.textContent = 'Off';
@@ -2161,10 +2209,12 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
       btnConnectBle.classList.remove('btn-secondary');
 
       const statusEl = document.getElementById('telemetryCanStatus');
+      const chEl = document.getElementById('telemetryChannels');
       if (statusEl) {
         statusEl.textContent = 'Desconectado';
         statusEl.style.color = 'var(--text-dim)';
       }
+      if (chEl) chEl.textContent = '--';
     }
 
     async function disconnectBle() {
@@ -2180,6 +2230,110 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
       }
       onBleDisconnected();
       showToast('🔌 Desconectado', 'Comunicação Bluetooth com o AD10 encerrada.', 'info', 3000);
+    }
+
+    /**
+     * Exibe resumo detalhado de diagnóstico BLE ao tocar na barra de telemetria
+     */
+    function showBleDiagnosticInfo() {
+      const dev = currentDeviceId || (bleDevice ? bleDevice.name : 'Nenhum');
+      const can = document.getElementById('telemetryCanStatus')?.textContent || '--';
+      const msg = `
+        <strong>Dispositivo:</strong> ${dev}<br>
+        <strong>CAN Status:</strong> ${can}<br>
+        <strong>Pacotes TX (Enviados):</strong> ${txCount}<br>
+        <strong>Pacotes RX (Recebidos):</strong> ${rxCount}<br>
+        <strong>Último Hex:</strong> ${document.getElementById('telemetryLastHex')?.textContent || '--'}<br><br>
+        <strong>Diagnóstico BLE:</strong><br>${bleDiscoverySummary}
+      `;
+      showToast('📊 Diagnóstico BLE', msg, 'info', 9000);
+    }
+
+    /**
+     * Mapeamento dinâmico de serviços GATT e ativação de notificações multi-canal
+     * Garante que o Android descubra e registre listeners em 0003 e 0004
+     */
+    async function setupBleGattAndListeners(deviceId) {
+      const BleClient = window.capacitorCommunityBluetoothLe.BleClient;
+      writeCharacteristics = [];
+      notifyCharacteristics = [];
+
+      showToast('🔍 Mapeando Canais', 'Descobrindo serviços GATT e canais de resposta...', 'info', 2000);
+
+      // 1. Descoberta obrigatória de serviços no Android GATT
+      try {
+        if (typeof BleClient.discoverServices === 'function') {
+          await BleClient.discoverServices(deviceId);
+          console.log('[BLE] discoverServices executado com sucesso');
+        }
+      } catch (eDisc) {
+        console.warn('[BLE] discoverServices aviso:', eDisc);
+      }
+
+      // 2. Consulta serviços reais do hardware
+      let services = [];
+      try {
+        if (typeof BleClient.getServices === 'function') {
+          services = await BleClient.getServices(deviceId);
+          console.log('[BLE] Serviços encontrados:', services);
+        }
+      } catch (eServ) {
+        console.warn('[BLE] getServices aviso:', eServ);
+      }
+
+      // 3. Monta listas de canais candidatos
+      const nusNotifyCandidates = [AD10_NUS.CHAR_0003, AD10_NUS.CHAR_0004];
+      const nusWriteCandidates = [AD10_NUS.CHAR_0004, AD10_NUS.CHAR_0003];
+
+      if (Array.isArray(services)) {
+        for (const s of services) {
+          const sUuid = (s.uuid || '').toLowerCase();
+          if (s.characteristics) {
+            for (const c of s.characteristics) {
+              const cUuid = (c.uuid || '').toLowerCase();
+              if (c.properties) {
+                if (c.properties.write || c.properties.writeWithoutResponse) {
+                  if (!writeCharacteristics.includes(cUuid)) writeCharacteristics.push(cUuid);
+                }
+                if (c.properties.notify || c.properties.indicate) {
+                  if (!nusNotifyCandidates.includes(cUuid)) nusNotifyCandidates.push(cUuid);
+                }
+              }
+            }
+          }
+        }
+      }
+
+      if (writeCharacteristics.length === 0) {
+        writeCharacteristics = nusWriteCandidates;
+      }
+
+      // 4. Registra Notificações em todos os canais possíveis (0003 e 0004)
+      let activeCount = 0;
+      for (const ch of nusNotifyCandidates) {
+        try {
+          await BleClient.startNotifications(deviceId, AD10_NUS.SERVICE, ch, (val) => {
+            const bytes = safeExtractBytes(val);
+            processIncomingCanBytes(bytes, ch);
+          });
+          notifyCharacteristics.push(ch);
+          activeCount++;
+          console.log(`[BLE] startNotifications SUCESSO no canal: ${ch}`);
+        } catch (errNotif) {
+          console.warn(`[BLE] Falha ao registrar notificação em ${ch}:`, errNotif);
+        }
+      }
+
+      const chEl = document.getElementById('telemetryChannels');
+      if (chEl) chEl.textContent = `${activeCount} ch`;
+
+      bleDiscoverySummary = `Serviços: ${services.length} | Escutando em: ${notifyCharacteristics.map(u => u.slice(4, 8)).join(', ') || 'Nenhum'} | Enviando em: ${writeCharacteristics.map(u => u.slice(4, 8)).join(', ')}`;
+
+      if (activeCount === 0) {
+        showToast('⚠️ Notificações BLE', 'Nenhum canal de resposta aceitou registro de notificação.', 'warning', 4000);
+      } else {
+        showToast('🛰️ AD10 Conectado!', `Canais de telemetria ativos (${activeCount} canal(is) ouvindo). Lendo ECU...`, 'success', 3000);
+      }
     }
 
     async function toggleBleConnection() {
@@ -2199,7 +2353,7 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
 
       if (isCapacitorNative && BleClient) {
         try {
-          showToast('🛰️ Bluetooth Nativo', 'Inicializando BLE...', 'info', 0);
+          showToast('🛰️ Bluetooth Nativo', 'Inicializando rádio BLE...', 'info', 0);
           await BleClient.initialize();
 
           // 1. Tenta reconexão direta pelo último MAC gravado (idêntico ao app oficial XTOOL)
@@ -2212,10 +2366,8 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
                 showToast('⚠️ Desconectado', 'O dongle AD10 foi desconectado.', 'warning', 4000);
               });
 
-              await BleClient.startNotifications(lastMac, AD10_NUS.SERVICE, AD10_NUS.RX_CHAR, (val) => {
-                const u8 = new Uint8Array(val.buffer, val.byteOffset || 0, val.byteLength || val.buffer.byteLength);
-                processIncomingCanBytes(u8);
-              });
+              // Executa descoberta de serviços e configuração de listeners multi-canal
+              await setupBleGattAndListeners(lastMac);
 
               currentDeviceId = lastMac;
               isNativeBle = true;
@@ -2224,7 +2376,6 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
               connText.textContent = 'AD10 OK';
               btnConnectBle.textContent = '🔌 Desconectar';
               btnConnectBle.classList.add('btn-secondary');
-              showToast('✅ Conectado!', 'Reconectado ao AD10 com sucesso!', 'success', 3000);
               if (isSimulating) btnSimulate.click();
               startPolling();
               return;
@@ -2252,10 +2403,8 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
                 showToast('⚠️ Desconectado', 'O dongle AD10 foi desconectado.', 'warning', 4000);
               });
 
-              await BleClient.startNotifications(devId, AD10_NUS.SERVICE, AD10_NUS.RX_CHAR, (val) => {
-                const u8 = new Uint8Array(val.buffer, val.byteOffset || 0, val.byteLength || val.buffer.byteLength);
-                processIncomingCanBytes(u8);
-              });
+              // Executa descoberta de serviços e configuração de listeners multi-canal
+              await setupBleGattAndListeners(devId);
 
               localStorage.setItem('ad10_last_mac', devId);
               currentDeviceId = devId;
@@ -2267,7 +2416,6 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
               btnConnectBle.textContent = '🔌 Desconectar';
               btnConnectBle.classList.add('btn-secondary');
 
-              showToast('✅ Conectado!', 'AD10 conectado automaticamente com sucesso! Lendo dados...', 'success', 4000);
               if (isSimulating) btnSimulate.click();
               startPolling();
             }
@@ -2308,7 +2456,6 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
         try {
           showToast('🔍 Procurando AD10', 'Abrindo seletor Bluetooth do Android... Selecione o seu AD10.', 'info', 0);
 
-          // acceptAllDevices garante que encontrará o AD10 independente do nome anunciado
           bleDevice = await navigator.bluetooth.requestDevice({
             acceptAllDevices: true,
             optionalServices: [
@@ -2328,15 +2475,35 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
 
           bleServer = await bleDevice.gatt.connect();
           const service = await bleServer.getPrimaryService(AD10_NUS.SERVICE);
-          bleTx = await service.getCharacteristic(AD10_NUS.TX_CHAR);
-          bleRx = await service.getCharacteristic(AD10_NUS.RX_CHAR);
+          
+          let boundWebChannels = 0;
+          try {
+            bleTx = await service.getCharacteristic(AD10_NUS.TX_CHAR);
+          } catch {}
 
-          await bleRx.startNotifications();
-          bleRx.addEventListener('characteristicvaluechanged', (e) => {
-            const v = e.target.value;
-            const buf = new Uint8Array(v.buffer, v.byteOffset || 0, v.byteLength || v.buffer.byteLength);
-            processIncomingCanBytes(buf);
-          });
+          try {
+            bleRx = await service.getCharacteristic(AD10_NUS.RX_CHAR);
+            await bleRx.startNotifications();
+            bleRx.addEventListener('characteristicvaluechanged', (e) => {
+              const buf = safeExtractBytes(e.target.value);
+              processIncomingCanBytes(buf, AD10_NUS.RX_CHAR);
+            });
+            boundWebChannels++;
+          } catch {}
+
+          // Tenta também a característica 0004 como ouvinte
+          try {
+            const rx4 = await service.getCharacteristic(AD10_NUS.CHAR_0004);
+            await rx4.startNotifications();
+            rx4.addEventListener('characteristicvaluechanged', (e) => {
+              const buf = safeExtractBytes(e.target.value);
+              processIncomingCanBytes(buf, AD10_NUS.CHAR_0004);
+            });
+            boundWebChannels++;
+          } catch {}
+
+          const chEl = document.getElementById('telemetryChannels');
+          if (chEl) chEl.textContent = `${boundWebChannels} ch`;
 
           isConnectedBle = true;
           isNativeBle = false;
@@ -2345,7 +2512,7 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
           btnConnectBle.textContent = '🔌 Desconectar';
           btnConnectBle.classList.add('btn-secondary');
 
-          showToast('✅ Conectado!', `AD10 conectado via Web Bluetooth! Lendo ECU do Prisma...`, 'success', 4000);
+          showToast('✅ Conectado!', `AD10 conectado via Web Bluetooth (${boundWebChannels} canais)! Lendo ECU...`, 'success', 4000);
           if (isSimulating) btnSimulate.click();
           startPolling();
           return;

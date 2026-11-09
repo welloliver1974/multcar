@@ -68,10 +68,12 @@ O dongle utiliza a arquitetura clássica da Nordic Semiconductor (NUS):
 | Função | UUID | Descrição |
 | :--- | :--- | :--- |
 | **Service UUID** | `6E400001-B5A3-F393-E0A9-E50E24DCCA9E` | Serviço principal de comunicação |
-| **TX Characteristic** | `6E400004-B5A3-F393-E0A9-E50E24DCCA9E` | Escrita do App para o Dongle (Write) |
-| **RX Characteristic** | `6E400003-B5A3-F393-E0A9-E50E24DCCA9E` | Notificações do Dongle para o App (Notify) |
+| **Canal 0004 (TX/RX)** | `6E400004-B5A3-F393-E0A9-E50E24DCCA9E` | Canal primário de escrita / notificação |
+| **Canal 0003 (RX/TX)** | `6E400003-B5A3-F393-E0A9-E50E24DCCA9E` | Canal de notificações / escrita secundária |
 | **CCCD Descriptor** | `00002902-0000-1000-8000-00805f9b34fb` | Habilitado escrevendo `[0x01, 0x00]` |
 | **Tamanho do Chunk** | `20 bytes` | Fragmentação obrigatória para respeito ao BLE MTU |
+
+> **Nota Crítica sobre o Android GATT:** Após a conexão, é mandatória a execução de `BleClient.discoverServices()`. Sem essa etapa, o registro de listeners via `startNotifications` não mapeia o descritor CCCD e é rejeitado silenciosamente, gerando o sintoma de `TX > 0` e `RX = 0`. O aplicativo agora executa a descoberta completa e registra ouvintes simultâneos em `6E400003` e `6E400004`.
 
 ### 4.2. Estrutura do Frame CAN Completo (Padrão ISO 15765-4 / GM Delphi)
 A ECU Delphi do Chevrolet Prisma 1.4 SPE/4 Flex descarta frames curtos com tamanho inferior a 8 bytes. O frame transmitido deve conter DLC=8 e preenchimento com `0x55`:
