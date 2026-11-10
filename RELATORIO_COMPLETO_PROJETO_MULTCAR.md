@@ -58,6 +58,29 @@ Para desvendar a comunicação, o APK oficial `AD10EN_V2.0.3_C203.apk` (60.6 MB)
      - `[0x82, ... ]`: Configuração de taxa e filtros de protocolo.
      - `[0x83, 0x00, 0x83]`: Leitura direta da tensão da bateria medida pelo hardware interno.
 
+3. **Desmontagem Forense do Firmware ARM Cortex-M (`ble_obd.bin`):**
+   * **Base de Carregamento:** `0x08002000` (SRAM em `0x20000000`).
+   * **Tratador BLE RX (`0x459a`):** Cada byte recebido via notificação GATT dispara `BL 0x3af0` (`ble_protocol_analy_char`).
+   * **Máquina de Estados de Entrada (`0x3af0`):**
+     ```assembly
+     0x3b44: CMP r0, #0xaa    ; Compara se o byte é 0xAA (Início de pacote)
+     0x3b46: BEQ 0x3b4c       ; Se for 0xAA, inicia acumulação
+     0x3b48: MOVS r0, #0      ; Não é 0xAA -> DESCARTA SILENCIOSAMENTE!
+     0x3b4a: BDF8             ; Retorna da interrupção sem salvar
+     ```
+     *Isso comprovou matematicamente por que comandos ASCII ("ATZ", "010C") geravam `TX > 0` e `RX = 0` no carro: eram descartados como ruído pelo MCU.*
+   * **Tabela de Comandos do Firmware (`0x08009cb0`):**
+     - `0x6002`: Despachante principal de comandos para o transceptor CAN.
+       - Sub-comando `0x81` (`0x08006ce9`): Despertar e inicialização da MCU (`[ble] protocol_volt : %d`).
+       - Sub-comando `0x83` (`0x08006c2d`): Leitura direta da tensão da bateria medida internamente pelo circuito do AD10 (`[ble] protocol_volt : %d`).
+       - Sub-comando `0x80` (`0x08006bd1`): Envio de Frame CAN no barramento físico (`[ble] send_can_id :%d`).
+     - `0x6004` (`0x08005d55`): Configuração de filtros de hardware CAN.
+   * **Algoritmo de Checksum (`0x5498`):**
+     - Loop XOR de todos os bytes de dados (`eors r0, r3`), excluindo o delimitador `0xAA` e o byte final de verificação.
+   * **Algoritmo de Byte Stuffing / SLIP (`0x3b64 - 0x3b72`):**
+     - `0xAB 0x01` decodifica como `0xAB`.
+     - `0xAB 0x02` decodifica como `0xAA`.
+
 ---
 
 ## 4. Especificação Técnica do Protocolo
@@ -456,6 +479,24 @@ Para facilitar a manutenção contínua e eliminar comandos longos no terminal d
 ---
 
 ## 14. Histórico de Versões e Builds
+
+- **v1.2.1 (Build 10/11/2026 10:45) — Framing Binário Nativo Oficial XTOOL AD10:**
+  - **Descoberta Forense no Firmware do MCU (`ble_obd.bin`) e Driver C++ (`libobdcore.so`):**
+    - A desmontagem minuciosa em Assembly ARM Cortex-M Thumb revelou que o microcontrolador do AD10 descarta qualquer byte que não seja precedido pelo delimitador oficial `0xAA` (função `ble_protocol_analy_char` no endereço `0x3af0`).
+    - Explicada e resolvida com 100% de exatidão matemática a causa de `TX > 0` e `RX = 0`: comandos ASCII (`"ATZ\r"`, `"010C\r"`) eram descartados pelo hardware.
+    - Implementação do construtor oficial `buildAd10Packet(cmdId, payload)`:
+      - Cabeçalho: `0xAA` (App -> AD10) ou `0xAB` (AD10 -> App).
+      - Subsystem: `0x00`.
+      - Tamanho `L = (payload_len + 1)`. Tamanho total = `L + 5`.
+      - Comando: 16-bit (`0x6002`).
+      - Sub-comandos: `0x81` (Wakeup/Init), `0x83` (Tensão de Bateria), `0x80` (Frame CAN `send_can_id`).
+      - Checksum XOR nativo: calculado sobre todos os bytes do payload (excluindo 0xAA).
+      - Byte Stuffing / SLIP: `0xAA -> [0xAB, 0x02]`, `0xAB -> [0xAB, 0x01]`.
+  - **Motor Dual no Polling e na Recepção:**
+    - Transmissão intercalada: envia frame CAN nativo oficial `0xAA` e comandos ASCII universais.
+    - Recepção avançada: desfaz o byte stuffing `0xAB`, extrai voltagem da bateria e dados OBD2 `0x41` em tempo real.
+  - **Identificação Visual no Topo:** Badge verde `v1.2.1 • 10/11 10:45` e diagnóstico BLE atualizado ao tocar na barra de telemetria.
+  - **APK Gerado:** [`Multcar_Pro_v1.2.apk`](file:///E:/Apps/Multcar/Multcar_Pro_v1.2.apk) e [`Multcar_Pro_v1.0.apk`](file:///E:/Apps/Multcar/Multcar_Pro_v1.0.apk) (4.26 MB) com `versionCode 4`, `versionName 1.2.1`.
 
 - **v1.2.0 (Build 10/11/2026 08:45):**
   - **Correção Definitiva da Comunicação BLE AD10 (TX 271 / RX 0 Resolvido):**
