@@ -807,7 +807,7 @@
     <div class="brand">
       <h1>🏎️ MULTCAR</h1>
       <span class="badge">Prisma 1.4</span>
-      <span class="badge version-badge" id="appVersionBadge" title="Multcar Pro v1.2.0">v1.2.0 • 10/11 08:45</span>
+      <span class="badge version-badge" id="appVersionBadge" title="Multcar Pro v1.2.1">v1.2.1 • 10/11 10:45</span>
     </div>
     <div class="header-actions">
       <div class="status-badge">
@@ -1855,6 +1855,39 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
     let rxCount = 0;
 
     /**
+     * Construtor Oficial de Pacotes Binários XTOOL AD10 (Descoberto por Engenharia Reversa em libobdcore.so e ble_obd.bin)
+     * Formato:
+     * - Byte 0: 0xAA (Início do Frame App -> AD10)
+     * - Byte 1: 0x00 (Canal / Subsystem)
+     * - Byte 2: L = (vetor.length - 1)
+     * - Byte 3: CmdId_Low (cmdId & 0xFF)
+     * - Byte 4: CmdId_High ((cmdId >> 8) & 0xFF)
+     * - Bytes 5..: Payload
+     * - Último Byte: Checksum XOR de todos os bytes de 1 a N-2 (excluindo 0xAA)
+     * - Byte Stuffing (SLIP): 0xAA -> [0xAB, 0x02], 0xAB -> [0xAB, 0x01] (exceto o 0xAA inicial)
+     */
+    function buildAd10Packet(cmdId, payload = []) {
+      const vec = [(cmdId & 0xFF), ((cmdId >> 8) & 0xFF), ...payload];
+      const L = (vec.length - 1) & 0xFF;
+      const unescaped = [0xAA, 0x00, L, ...vec];
+
+      let chk = 0;
+      for (let i = 1; i < unescaped.length; i++) {
+        chk ^= unescaped[i];
+      }
+      unescaped.push(chk & 0xFF);
+
+      const escaped = [0xAA];
+      for (let i = 1; i < unescaped.length; i++) {
+        const b = unescaped[i];
+        if (b === 0xAA) escaped.push(0xAB, 0x02);
+        else if (b === 0xAB) escaped.push(0xAB, 0x01);
+        else escaped.push(b);
+      }
+      return new Uint8Array(escaped);
+    }
+
+    /**
      * Monta o frame CAN 11-bit padrão ISO 15765-4 completo (8 bytes de payload CAN)
      * Header AD10: [0x08, 0x07, 0xDF, length, mode, pid, 0x55, 0x55...]
      */
@@ -1980,6 +2013,42 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
       if (statusEl && statusEl.textContent !== 'Ativo') {
         statusEl.textContent = 'Ativo';
         statusEl.style.color = 'var(--green)';
+      }
+
+      // 0. Resposta Oficial XTOOL AD10 com Framing 0xAB
+      if (data[0] === 0xAB && data.length >= 5) {
+        // Desfaz o byte stuffing (SLIP): [0xAB, 0x02] -> 0xAA, [0xAB, 0x01] -> 0xAB
+        const unescaped = [0xAB];
+        for (let i = 1; i < data.length; i++) {
+          if (data[i] === 0xAB && i + 1 < data.length) {
+            if (data[i + 1] === 0x02) { unescaped.push(0xAA); i++; }
+            else if (data[i + 1] === 0x01) { unescaped.push(0xAB); i++; }
+            else { unescaped.push(data[i]); }
+          } else {
+            unescaped.push(data[i]);
+          }
+        }
+
+        // Tensão de Bateria retornada pelo AD10 (Sub-comando 0x83)
+        for (let i = 2; i < unescaped.length - 2; i++) {
+          if (unescaped[i] === 0x83) {
+            const vRaw = (unescaped[i + 1] << 8) | unescaped[i + 2];
+            if (vRaw > 500 && vRaw < 2500) {
+              setVoltage(vRaw / 100);
+            }
+          }
+        }
+
+        // Busca dados OBD2 (0x41) dentro do payload CAN desembalado do AD10
+        for (let i = 2; i < unescaped.length - 2; i++) {
+          if (unescaped[i] === 0x41) {
+            const pid = unescaped[i + 1];
+            const a = unescaped[i + 2] ?? 0;
+            const b = unescaped[i + 3] ?? 0;
+            handleObdPidResponse(pid, a, b);
+            break;
+          }
+        }
       }
 
       // 1. Resposta de Tensão da MCU AD10 (Comando 0x83)
@@ -2183,10 +2252,10 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
 
     /**
      * Handshake e Inicialização Oficial XTOOL AD10:
-     * 1. Acorda o MCU via 0x81
-     * 2. Reinicia e configura o chip ELM (ATZ, ATE0, ATL0, ATH0, ATSP6)
-     * 3. Configura barramento CAN nativo nos pinos 6 e 14 a 500 kbps
-     * 4. Solicita PIDs com 0100 e tensão com 0x83
+     * 1. Acorda o MCU via comando binário oficial 0x6002 -> sub-comando 0x81 (framing 0xAA)
+     * 2. Configura multiplexador interno nos pinos 6 e 14 a 500 kbps (CAN,std,0,pin:6+14...)
+     * 3. Envia sequência ELM universal em caso de dongles clones com bridge ativa
+     * 4. Solicita Tensão de Bateria com comando binário oficial 0x6002 -> sub-comando 0x83
      */
     async function initAd10Device() {
       const statusEl = document.getElementById('telemetryCanStatus');
@@ -2195,40 +2264,39 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
         statusEl.style.color = 'var(--yellow)';
       }
 
-      showToast('⚙️ Inicializando AD10', 'Ativando transceptor CAN 500k nos pinos 6 e 14 do Prisma...', 'info', 2500);
+      showToast('⚙️ Inicializando AD10', 'Ativando MCU XTOOL e transceptor CAN 500k nos pinos 6 e 14...', 'info', 2500);
 
       const enc = new TextEncoder();
 
       try {
-        // 1. Comando Wake-up binário MCU AD10
-        await sendCanFrame(new Uint8Array([0x81, 0x00, 0x81]));
+        // 1. Wakeup / Init Oficial da MCU do AD10 (Cmd 0x6002 -> sub-comando 0x81 com framing 0xAA)
+        const wakeupPacket = buildAd10Packet(0x6002, [0x01, 0x81]);
+        await sendCanFrame(wakeupPacket);
         await new Promise(r => setTimeout(r, 150));
 
-        // 2. ATZ (Reset ELM327) com tempo adequado para o MCU inicializar
-        await sendCanFrame(enc.encode("ATZ\r"));
-        await new Promise(r => setTimeout(r, 800));
-
-        // 3. Sequência de configuração ELM para CAN ISO 15765-4 11-bit 500k (Chevrolet Prisma)
-        const atInit = [
-          "ATE0\r",  // Eco desligado
-          "ATL0\r",  // Quebras extras de linha desligadas
-          "ATH0\r",  // Headers desligados (respostas limpas 41 0C ...)
-          "ATSP6\r", // Protocolo 6: ISO 15765-4 CAN (11 bit ID, 500 kbaud)
-          "0100\r"   // Teste de conexão com a ECU do motor
-        ];
-        for (const at of atInit) {
-          await sendCanFrame(enc.encode(at));
-          await new Promise(r => setTimeout(r, 120));
-        }
-
-        // 4. String de Configuração de Hardware XTOOL (descoberta em libobdcore.so):
+        // 2. String de Configuração de Hardware XTOOL (descoberta em libobdcore.so):
         // Garante multiplexação física dos pinos 6+14 a 500 kbps
         const canCfg = "CAN,std,0,pin:6+14,07df/07e0/07f0,period:0/2/200/80/1000\r\n";
         await sendCanFrame(enc.encode(canCfg));
         await new Promise(r => setTimeout(r, 150));
 
-        // 5. Solicitação de Tensão de Bateria (Comando 0x83 para MCU do AD10)
-        await sendCanFrame(new Uint8Array([0x83, 0x00, 0x83]));
+        // 3. Sequência ELM universal em caso de dongles clones com bridge ativa
+        const atInit = [
+          "ATZ\r",   // Reset ELM327
+          "ATE0\r",  // Eco desligado
+          "ATL0\r",  // Quebras extras de linha desligadas
+          "ATH0\r",  // Headers desligados
+          "ATSP6\r", // Protocolo 6: ISO 15765-4 CAN (11 bit ID, 500 kbaud)
+          "0100\r"   // Teste de conexão com a ECU do motor
+        ];
+        for (const at of atInit) {
+          await sendCanFrame(enc.encode(at));
+          await new Promise(r => setTimeout(r, 100));
+        }
+
+        // 4. Solicitação Oficial de Tensão de Bateria (Cmd 0x6002 -> sub-comando 0x83 com framing 0xAA)
+        const voltPacket = buildAd10Packet(0x6002, [0x01, 0x83]);
+        await sendCanFrame(voltPacket);
         await new Promise(r => setTimeout(r, 100));
 
         if (statusEl) {
@@ -2254,13 +2322,23 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
           if (!isConnectedBle) return;
           const item = POLL_QUEUE[pollIndex];
           pollIndex = (pollIndex + 1) % POLL_QUEUE.length;
-          
-          // Envia em formato texto ASCII universal ("010C\r", etc.)
-          if (item && item.cmd) {
+          if (!item) return;
+
+          // 1. Envia Frame CAN Nativo XTOOL AD10 com enquadramento oficial 0xAA:
+          // Sub-comando 0x80 (send_can_id) + CAN ID 0x07DF (11-bit) + 8 bytes de dados ISO 15765-4
+          const can12 = [
+            0x01, 0x80,                      // Sub-comando 0x80
+            0xDF, 0x07, 0x00, 0x00,          // CAN ID 0x07DF (broadcast OBD2)
+            0x02, item.mode, item.pid,       // ISO 15765-4 Single Frame (len=2, mode, pid)
+            0x00, 0x00, 0x00, 0x00, 0x00     // Padding de 8 bytes
+          ];
+          const ad10Frame = buildAd10Packet(0x6002, can12);
+          await sendCanFrame(ad10Frame);
+
+          // 2. Envia também formato ASCII caso o dongle esteja em bridge ELM327 ("010C\r")
+          if (item.cmd) {
+            await new Promise(r => setTimeout(r, 30));
             await sendCanFrame(enc.encode(item.cmd));
-          } else if (item) {
-            const frame = buildCan11BitFrame(item.mode, item.pid);
-            await sendCanFrame(frame);
           }
         }, 160);
       });
@@ -2318,7 +2396,7 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
       const dev = currentDeviceId || (bleDevice ? bleDevice.name : 'Nenhum');
       const can = document.getElementById('telemetryCanStatus')?.textContent || '--';
       const msg = `
-        <strong>Versão do App:</strong> v1.2.0 (Build 10/11/2026 08:45)<br>
+        <strong>Versão do App:</strong> v1.2.1 (Build 10/11/2026 10:45) [Framing Binário AD10 Oficial]<br>
         <strong>Dispositivo:</strong> ${dev}<br>
         <strong>CAN Status:</strong> ${can}<br>
         <strong>Pacotes TX (Enviados):</strong> ${txCount}<br>

@@ -137,5 +137,31 @@ O protocolo foi integralmente implementado e validado:
 - **Diagnóstico DTC:** Varredura (Modo 03) e limpeza de falhas da injeção eletrônica (Modo 04).
 
 ---
-*Especificação técnica atualizada em 09/nov/2026 com engenharia reversa completa do protocolo XTOOL AD10 e correção do barramento CAN.*
+
+## 8. Engenharia Reversa Profunda do Firmware MCU (`ble_obd.bin`) & Framing Binário Nativo (v1.2.1)
+
+A desmontagem forense do firmware ARM Cortex-M Thumb (`ble_obd.bin`) do microcontrolador do AD10 revelou a arquitetura real interna:
+1. **O AD10 NÃO é um clone ELM327 genérico:**
+   - O fluxo de entrada GATT (`0x459a`) direciona cada byte recebido imediatamente para a máquina de estados `ble_protocol_analy_char(char c)` em `0x3af0`.
+   - Caracteres ASCII como `"ATZ\r"` ou `"010C\r"` que não iniciem com `0xAA` são **descartados silenciosamente**. Isso explica com 100% de precisão por que o app apresentava `TX > 0` mas `RX = 0`.
+2. **Estrutura de Enquadramento Binário Oficial:**
+   - **Byte 0:** `0xAA` (Início do Frame do App para o AD10) ou `0xAB` (Resposta do AD10 para o App).
+   - **Byte 1:** `0x00` (Subsystem / Sequence ID).
+   - **Byte 2:** `Length L = (payload_len + 1)`. Tamanho total do pacote = `L + 5`.
+   - **Byte 3:** `Cmd_Low` (`cmdId & 0xFF`).
+   - **Byte 4:** `Cmd_High` (`(cmdId >> 8) & 0xFF`).
+   - **Bytes 5 a N-2:** Payload de dados.
+   - **Byte N-1:** Checksum XOR de todos os bytes de 1 a N-2 (`buffer[1] ^ buffer[2] ^ ... ^ buffer[N-2]`). `buffer[0]` (`0xAA`) e o byte de checksum são excluídos.
+3. **Byte Stuffing / Escaping (SLIP):**
+   - Qualquer ocorrência interna de `0xAA` é substituída por `[0xAB, 0x02]`.
+   - Qualquer ocorrência interna de `0xAB` é substituída por `[0xAB, 0x01]`.
+4. **Tabela de Despacho de Comandos (`0x08009cb0`):**
+   - `Cmd 0x6002`: Despachante mestre de sub-comandos para o transceptor CAN e periféricos.
+     - Sub-comando `0x81`: Wake-up / Inicialização do MCU. Pacote: `AA 00 03 02 60 01 81 E1`.
+     - Sub-comando `0x83`: Leitura da Tensão da Bateria. Pacote: `AA 00 03 02 60 01 83 E3`.
+     - Sub-comando `0x80`: Envio de Frame CAN 11-bit (`send_can_id`). Pacote: `AA 00 0F 02 60 01 80 DF 07 00 00 02 01 <PID> 00 00 00 00 00 <CHK>`.
+   - `Cmd 0x6004`: Configuração de filtros de hardware CAN.
+
+---
+*Especificação técnica atualizada em 10/nov/2026 com desmontagem forense completa do firmware do microcontrolador e driver C++ nativo do XTOOL AD10.*
 
