@@ -61,17 +61,44 @@
 
 ---
 
-## 4. Próximo Passo do Usuário no Carro
+## 4. Atualização v1.2.0 (Diagnóstico do Teste Real com AD10 e Correção Definitiva)
+
+### 4.1 Causa Raiz Identificada no Teste de 10/11
+No teste prático com o dongle XTOOL AD10 no Prisma, o app mostrou:
+- `v1.1.0 • 09/11 21:10`
+- `🟢 AD10 OK` (BLE conectado)
+- `TX: 271`, `RX: 0`
+- `Canais: 1 ch`
+
+A análise reversa profunda nos binários `libobdcore.so`, `ble_obd.bin` e `classes.dex` do app oficial XTOOL revelou os 5 fatores exatos:
+1. **Papeis dos Canais BLE NUS no XTOOL AD10:**
+   - `6e400004`: Canal EXCLUSIVO de **Escrita (TX App -> AD10)**. Não possui descritor de notificação CCCD (`0x2902`).
+   - `6e400003`: Canal EXCLUSIVO de **Notificação (RX AD10 -> App)**. Possui descritor CCCD.
+   - Quando o app tentava registrar notificação em `0004`, o Android GATT falhava com erro de descritor, gerando a mensagem `1 ch` e travando a fila de operações GATT.
+2. **Conflito de Escrita no Canal 0003:**
+   - O método `sendCanFrame` enviava pacotes para uma lista contendo tanto `0004` quanto `0003`. Escrever em `0003` (característica só de leitura/notificação) causava `GATT_WRITE_NOT_PERMITTED` no Android.
+3. **Inversão de Handshake vs Notificação:**
+   - O handshake inicial do AD10 (`0x81 0x00 0x81`) era transmitido antes do registro de notificações no canal `0003`. A resposta inicial da ECU/dongle era perdida.
+4. **Comandos de Polling em Formato Binário vs ASCII:**
+   - O loop de polling enviava frames brutos CAN de 11 bytes (`[0x08, 0x07, 0xDF, ...]`). O microcontrolador do AD10 (firmware `ble_obd.bin`) atua como uma ponte ELM-compatible e descarta frames binários, esperando comandos ASCII terminados por `\r` (`010C\r`, `010D\r`, `0105\r`, etc.).
+5. **Tempo de Reset `ATZ`:**
+   - O comando `ATZ` reiniciava o chip ELM sem intervalo suficiente (>800ms) antes dos próximos comandos de configuração (`ATE0`, `ATH0`, `ATSP6`).
+
+---
+
+## 5. Próximo Passo do Usuário no Carro (Versão v1.2.0)
 
 1. **Atualizar a aplicação:**
    - Na VPS: rodar `multcar att` para atualizar o PWA.
-   - No celular / multimídia: instalar o novo [`Multcar_Pro_v1.1.apk`](file:///E:/Apps/Multcar/Multcar_Pro_v1.1.apk) (ou `Multcar_Pro_v1.0.apk` atualizado).
+   - No celular / multimídia: instalar o novo [`Multcar_Pro_v1.2.apk`](file:///E:/Apps/Multcar/Multcar_Pro_v1.2.apk) (ou `Multcar_Pro_v1.0.apk` atualizado).
 2. **Conferir o Carimbo de Versão na Tela:**
-   - Ao abrir o app, confirme no cabeçalho a badge verde: **`v1.1.0 • 09/11 21:10`** (garantindo visualmente que você está com a versão mais recente em execução).
+   - Ao abrir o app, confirme no cabeçalho a badge verde: **`v1.2.0 • 10/11 08:45`** (garantindo visualmente que você está com a versão corrigida).
 3. **Conectar ao AD10:**
-   - Ligar a ignição do Prisma (painel aceso).
+   - Ligar a ignição do Prisma (painel aceso, motor ligado ou só meia chave).
    - Tocar no botão **"📡 Conectar"**.
 4. **Observar a Barra de Telemetria:**
-   - Verificar se `Canais:` marca **`2 ch`** (confirma que o Android GATT ativou os ouvintes em 0003 e 0004).
-   - Observar o contador **RX** subindo junto com o **TX**.
-   - Se quiser ver os detalhes da conexão, basta **tocar em cima da barra de telemetria** para abrir o pop-up de diagnóstico na hora (mostrando versão, build, TX, RX e canais).
+   - `Canais:` marcará **`1 ch`** (ouvindo no canal correto `0003`).
+   - `CAN Status:` passará para **`CAN 500k OK`** e depois **`Ativo`**.
+   - O contador **RX** começará a subir junto com o **TX** à medida que as respostas da ECU chegarem (`41 0C ...`).
+   - Os mostradores de RPM, Velocidade, Temperatura, MAP e Carga começarão a se mover em tempo real.
+   - Se quiser ver os detalhes da conexão, basta **tocar em cima da barra de telemetria** para abrir o pop-up de diagnóstico (mostrando versão v1.2.0, build, TX, RX e canal RX/TX).

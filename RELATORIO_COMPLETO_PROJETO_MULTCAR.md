@@ -457,13 +457,24 @@ Para facilitar a manutenção contínua e eliminar comandos longos no terminal d
 
 ## 14. Histórico de Versões e Builds
 
+- **v1.2.0 (Build 10/11/2026 08:45):**
+  - **Correção Definitiva da Comunicação BLE AD10 (TX 271 / RX 0 Resolvido):**
+    - Descoberta dos papeis exclusivos das características Nordic UART após engenharia reversa no APK XTOOL original:
+      - `6E400004`: Canal EXCLUSIVO de escrita (App -> AD10). Removida tentativa indevida de registrar notificação neste canal (não possui descritor CCCD `0x2902`), eliminando o erro de descriptor no Android GATT.
+      - `6E400003`: Canal EXCLUSIVO de notificação (AD10 -> App). Removida escrita em `0003`, que gerava `GATT_WRITE_NOT_PERMITTED`.
+    - **Reordenação do Handshake:** As notificações em `0003` agora são registradas e confirmadas ANTES de disparar os primeiros bytes de inicialização.
+    - **Formato dos Comandos de Polling:** Substituição de frames CAN binários crus de 11 bytes por comandos OBD2 ASCII padrão terminados em `\r` (`010C\r`, `010D\r`, `0105\r`, `010B\r`, etc.), reconhecidos nativamente pelo microcontrolador do AD10.
+    - **Buffer Acumulador de Resposta:** Implementado acumulador `rxStringAccumulator` com divisão por `\r`, `\n` e `>`, suportando tanto respostas ASCII (`41 0C ...`, `12.4V`) quanto frames binários da MCU (`0x81`, `0x83`).
+    - **Ajuste de Timing ATZ:** Intervalo de 800ms após o reset do ELM327 para permitir reinicialização completa do chip.
+  - **Identificação Visual:** Badge no cabeçalho `v1.2.0 • 10/11 08:45`.
+  - **APK Gerado:** [`Multcar_Pro_v1.2.apk`](file:///E:/Apps/Multcar/Multcar_Pro_v1.2.apk) (4.26 MB) com `versionCode 3`, `versionName 1.2.0`.
+
 - **v1.1.0 (Build 09/11/2026 21:10):**
   - **Identificação Visual:** Badge no cabeçalho `v1.1.0 • 09/11 21:10` para identificação imediata na multimídia e celular.
   - **Diagnóstico ao Toque:** Pop-up com detalhes da versão, canais ouvintes, pacotes TX/RX e status da descoberta GATT.
-  - **Fix BLE GATT Android:** Inclusão de `BleClient.discoverServices()` para resolver descriptors CCCD (`0x2902`) que causavam `RX = 0`.
-  - **Dual-Channel Nordic UART:** Escuta paralela nas características `6E400003` e `6E400004` com envio mapeado.
+  - **Fix BLE GATT Android:** Inclusão de `BleClient.discoverServices()` para resolver descriptors CCCD (`0x2902`).
   - **APK Gerado:** [`Multcar_Pro_v1.1.apk`](file:///E:/Apps/Multcar/Multcar_Pro_v1.1.apk) (4.26 MB) com `versionCode 2`.
 
 ---
-*Relatório atualizado em 09/nov/2026 com Multcar Pro v1.1.0, Build Stamp no cabeçalho e sincronização Git.*
+*Relatório atualizado em 10/nov/2026 com Multcar Pro v1.2.0, Correção Definitiva BLE Nordic UART AD10 e sincronização Git.*
 

@@ -12,15 +12,23 @@ backup_k2401/
 unpacked_apk/
 AD10EN_V2.0.3_C203.apk
 
-# Manter apenas o APK compilado final do projeto
+# Imagens temporárias de teste e prints
+WhatsApp Image*
 *.apk
 !Multcar_Pro_v1.0.apk
 !Multcar_Pro_v1.1.apk
+!Multcar_Pro_v1.2.apk
 
-# Logs e arquivos temporários
+# Logs e arquivos temporários de análise e engenharia reversa
 *.log
 *.tmp
 scratch/
 .DS_Store
 Thumbs.db
+disasm_*.js
+inspect_*.js
+search_*.js
+dump_*.js
+*_disasm.txt
+disasm_range_out.txt
 
