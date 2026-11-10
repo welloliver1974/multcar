@@ -15,6 +15,7 @@ AD10EN_V2.0.3_C203.apk
 # Manter apenas o APK compilado final do projeto
 *.apk
 !Multcar_Pro_v1.0.apk
+!Multcar_Pro_v1.1.apk
 
 # Logs e arquivos temporários
 *.log

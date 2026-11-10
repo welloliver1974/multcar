@@ -65,11 +65,13 @@
 
 1. **Atualizar a aplicação:**
    - Na VPS: rodar `multcar att` para atualizar o PWA.
-   - No celular / multimídia: reinstalar com o novo [`Multcar_Pro_v1.0.apk`](file:///E:/Apps/Multcar/Multcar_Pro_v1.0.apk) ou recarregar a página do Chrome.
-2. **Conectar ao AD10:**
+   - No celular / multimídia: instalar o novo [`Multcar_Pro_v1.1.apk`](file:///E:/Apps/Multcar/Multcar_Pro_v1.1.apk) (ou `Multcar_Pro_v1.0.apk` atualizado).
+2. **Conferir o Carimbo de Versão na Tela:**
+   - Ao abrir o app, confirme no cabeçalho a badge verde: **`v1.1.0 • 09/11 21:10`** (garantindo visualmente que você está com a versão mais recente em execução).
+3. **Conectar ao AD10:**
    - Ligar a ignição do Prisma (painel aceso).
    - Tocar no botão **"📡 Conectar"**.
-3. **Observar a Barra de Telemetria:**
+4. **Observar a Barra de Telemetria:**
    - Verificar se `Canais:` marca **`2 ch`** (confirma que o Android GATT ativou os ouvintes em 0003 e 0004).
    - Observar o contador **RX** subindo junto com o **TX**.
-   - Se quiser ver os detalhes da conexão, basta **tocar em cima da barra de telemetria** para abrir o pop-up de diagnóstico na hora.
+   - Se quiser ver os detalhes da conexão, basta **tocar em cima da barra de telemetria** para abrir o pop-up de diagnóstico na hora (mostrando versão, build, TX, RX e canais).

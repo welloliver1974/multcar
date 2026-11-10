@@ -88,6 +88,18 @@
       white-space: nowrap;
     }
 
+    .brand .version-badge {
+      background: rgba(16, 185, 129, 0.15);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.35);
+      font-size: 0.62rem;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-weight: 600;
+      white-space: nowrap;
+      letter-spacing: 0.3px;
+    }
+
     .header-actions {
       display: flex;
       align-items: center;
@@ -795,6 +807,7 @@
     <div class="brand">
       <h1>🏎️ MULTCAR</h1>
       <span class="badge">Prisma 1.4</span>
+      <span class="badge version-badge" id="appVersionBadge" title="Multcar Pro v1.1.0">v1.1.0 • 09/11 21:10</span>
     </div>
     <div class="header-actions">
       <div class="status-badge">
@@ -2239,6 +2252,7 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
       const dev = currentDeviceId || (bleDevice ? bleDevice.name : 'Nenhum');
       const can = document.getElementById('telemetryCanStatus')?.textContent || '--';
       const msg = `
+        <strong>Versão do App:</strong> v1.1.0 (Build 09/11/2026 21:10)<br>
         <strong>Dispositivo:</strong> ${dev}<br>
         <strong>CAN Status:</strong> ${can}<br>
         <strong>Pacotes TX (Enviados):</strong> ${txCount}<br>

@@ -454,5 +454,16 @@ Para facilitar a manutenção contínua e eliminar comandos longos no terminal d
   * `multcar restart`: Reinicia rapidamente os serviços.
 
 ---
-*Relatório atualizado em 08/nov/2026 com CLI multcar att, Computador de Bordo Dinâmico e sincronização Git.*
+
+## 14. Histórico de Versões e Builds
+
+- **v1.1.0 (Build 09/11/2026 21:10):**
+  - **Identificação Visual:** Badge no cabeçalho `v1.1.0 • 09/11 21:10` para identificação imediata na multimídia e celular.
+  - **Diagnóstico ao Toque:** Pop-up com detalhes da versão, canais ouvintes, pacotes TX/RX e status da descoberta GATT.
+  - **Fix BLE GATT Android:** Inclusão de `BleClient.discoverServices()` para resolver descriptors CCCD (`0x2902`) que causavam `RX = 0`.
+  - **Dual-Channel Nordic UART:** Escuta paralela nas características `6E400003` e `6E400004` com envio mapeado.
+  - **APK Gerado:** [`Multcar_Pro_v1.1.apk`](file:///E:/Apps/Multcar/Multcar_Pro_v1.1.apk) (4.26 MB) com `versionCode 2`.
+
+---
+*Relatório atualizado em 09/nov/2026 com Multcar Pro v1.1.0, Build Stamp no cabeçalho e sincronização Git.*
 

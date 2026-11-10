@@ -1,6 +1,6 @@
 {
   "name": "multcar-app",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "type": "module",
   "description": "Dashboard automotivo e scanner de diagnóstico para Chevrolet Prisma e central multimídia K2401 via XTOOL AD10",
   "main": "index.ts",
