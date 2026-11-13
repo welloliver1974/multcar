@@ -480,6 +480,12 @@ Para facilitar a manutenção contínua e eliminar comandos longos no terminal d
 
 ## 14. Histórico de Versões e Builds
 
+- **v1.2.4 (Build 13/11/2026 14:10) — Handshake Completo Nativo XTOOL com `systerm enter` e Protocolo 1 (STD 500K):**
+  - **Identificação Visual Atualizada no Topo:** Badge no cabeçalho atualizado para **`v1.2.4 • 13/11 14:10`** para diferenciação imediata e garantia de que o usuário está com a compilação mais recente.
+  - **Injeção do Sub-comando Oficial `0x01` (`systerm enter`):** O handshake nativo agora despacha o sub-comando `0x01` para a função `0x80063c5` do microcontrolador, ativando fisicamente os transceptores CAN dos pinos 6 e 14.
+  - **Configuração de Protocolo Dupla:** Configura tanto o valor `1` (`ISO15765-4 STD 500K` na tabela interna de `ObdProtocol` do AD10) quanto o valor `6`, garantindo que o hardware opere em CAN 11b/500k.
+  - **APK Gerado:** [`Multcar_Pro_v1.2.apk`](file:///E:/Apps/Multcar/Multcar_Pro_v1.2.apk) e [`Multcar_Pro_v1.0.apk`](file:///E:/Apps/Multcar/Multcar_Pro_v1.0.apk) (4.29 MB) com `versionCode 7`, `versionName 1.2.4`.
+
 - **v1.2.3 (Build 13/11/2026 11:00) — Conexão GATT Rock-Solid, Separação Estrita de Protocolos e Seletor Dual-Mode em 1 Toque:**
   - **Eliminação Total da Regressão "Conecta e Cai" / Loop de Status "Configurando...":**
     - Identificada a causa da desconexão imediata na v1.2.2: `startNotifications` em `6E400004` (Write-Only, sem descritor CCCD `0x2902`) gerava `GATT 133` / status `0x13` na pilha Android, derrubando o link BLE logo após a conexão.
