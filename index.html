@@ -2335,14 +2335,20 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
         await sendCanFrame(verPacket);
         await new Promise(r => setTimeout(r, 60));
 
-        // 3. Configura Protocolo OBD: CAN 11-bit 500k (Sub-comando 0x02 = obd_protocol, valor 6 para ISO 15765-4)
-        const protoPacket = buildAd10Packet(0x6002, [0x01, 0x02, 0x06]);
-        await sendCanFrame(protoPacket);
-        await new Promise(r => setTimeout(r, 60));
+        // 3. Configura Protocolo OBD: CAN 11-bit 500k (Sub-comando 0x02 = obd_protocol: 1 e 6 para ISO 15765-4)
+        await sendCanFrame(buildAd10Packet(0x6002, [0x01, 0x02, 0x01]));
+        await new Promise(r => setTimeout(r, 50));
+        await sendCanFrame(buildAd10Packet(0x6002, [0x01, 0x02, 0x06]));
+        await new Promise(r => setTimeout(r, 50));
 
         // 4. Configura Baud Rate: 500000 bps (Sub-comando 0x03 = bps, 4 bytes big endian: 0x00, 0x07, 0xA1, 0x20)
         const bpsPacket = buildAd10Packet(0x6002, [0x01, 0x03, 0x00, 0x07, 0xA1, 0x20]);
         await sendCanFrame(bpsPacket);
+        await new Promise(r => setTimeout(r, 60));
+
+        // 5. Ativação do Barramento CAN (Sub-comando 0x01 = systerm enter)
+        const enterPacket = buildAd10Packet(0x6002, [0x01, 0x01]);
+        await sendCanFrame(enterPacket);
         await new Promise(r => setTimeout(r, 60));
 
         if (statusEl) {
