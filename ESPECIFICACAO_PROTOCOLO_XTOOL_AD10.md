@@ -163,5 +163,54 @@ A desmontagem forense do firmware ARM Cortex-M Thumb (`ble_obd.bin`) do microcon
    - `Cmd 0x6004`: Configuração de filtros de hardware CAN.
 
 ---
-*Especificação técnica atualizada em 10/nov/2026 com desmontagem forense completa do firmware do microcontrolador e driver C++ nativo do XTOOL AD10.*
+
+## 9. Descobertas Forenses Críticas do App Oficial (`BleConnector` / `ObdImplment`) & Correção Definitiva do "RX = 0" (v1.2.2)
+
+Em análise forense aprofundada nos binários Dalvik (`classes.dex`), bibliotecas C++ nativas (`libobdcore.so` arm64/armeabi-v7a) e camadas de transporte do Bluetooth LE (`Device.kt` / `BluetoothLe.kt`), foram isoladas as **três causas raízes exatas** que provocavam `TX > 0` com `RX = 0` no veículo:
+
+### 9.1. Causa Raiz #1 — Tipo de Escrita no GATT (`WRITE_TYPE_DEFAULT` vs `WRITE_TYPE_NO_RESPONSE`)
+* **Código do App Oficial (`BleConnector.java`):**
+  A descompilação de `BleConnector.onMsgWrite` (código em `0x280708`) revelou que o driver oficial invoca:
+  ```java
+  bluetoothGatt.writeCharacteristic(mWriteCharacteristic);
+  ```
+  O método **NUNCA chamou `setWriteType(NO_RESPONSE)`**. No Android BLE, o comportamento padrão ao não setar o tipo é `WRITE_TYPE_DEFAULT` (Write COM confirmação / ATT Opcode `0x12`).
+* **O Problema no Multcar v1.2.1:**
+  Na v1.2.1, chamávamos `BleClient.writeWithoutResponse` prioritariamente.
+  1. No plugin `@capacitor-community/bluetooth-le` (`Device.kt`), ao usar `writeWithoutResponse`, uma Promise fica aguardando o callback `onCharacteristicWrite`. Porém, na maioria dos chipsets Android, a pilha Bluetooth **NÃO emite callback para comandos sem resposta**, fazendo a thread do plugin travar por até 10 segundos por pacote (`timeout = 10000ms`).
+  2. O chip BLE do dongle XTOOL AD10 espera pacotes reconhecidos (`WRITE_REQ`). Pacotes não reconhecidos (`WRITE_CMD`) eram silenciosamente descartados pelo microcontrolador.
+* **Solução Implementada (v1.2.2):**
+  Inversão da prioridade: agora executamos `BleClient.write` (com resposta / `WRITE_TYPE_DEFAULT`) primeiro, exatamente como o app oficial. Se e somente se o canal rejeitar resposta, é feito o fallback.
+
+### 9.2. Causa Raiz #2 — Subscrição Simultânea nos Canais 0003 e 0004 (Dual-Channel GATT)
+* **Código do App Oficial (`BleConnector$3.onServicesDiscovered` em `0x27f8c0`):**
+  ```java
+  bluetoothGatt.setCharacteristicNotification(mWriteCharacteristic, true); // 6E400004!
+  bluetoothGatt.setCharacteristicNotification(mReadCharacteristic, true);  // 6E400003!
+  ```
+  O app oficial habilita notificações em **AMBAS** as características simultaneamente.
+* **O Problema no Multcar v1.2.1:**
+  A v1.2.1 registrava notificação unicamente em `6E400003`. Se o dongle transmitisse telemetria no canal `0004` ou exigisse ambas habilitadas para liberar o transceptor CAN, nenhum dado era entregue à interface.
+* **Solução Implementada (v1.2.2):**
+  Ativação de notificações em `6E400003`, `6E400004` e `6E400002` em blocos `try/catch` independentes. Os dados que chegarem por qualquer canal são imediatamente decodificados.
+
+### 9.3. Causa Raiz #3 — Inundação Cega do Buffer do Microcontrolador (`TX: 501`)
+* **O Problema no Multcar v1.2.1:**
+  Um `setInterval` rígido de 160ms disparava sem controle de fluxo. Sem receber o RX, o app disparou mais de 500 pacotes em poucos minutos, causando estouro do buffer serial de 64/128 bytes da MCU do AD10 e travamento do barramento.
+* **Solução Implementada (v1.2.2):**
+  Implementação de loop adaptativo sequencial com proteção anti-flood:
+  - Se após 8 transmissões o `RX` persistir em 0, o app **interrompe o envio de PIDs** e reexecuta o handshake de ativação do multiplexador de hardware a cada 1,5s até que a ECU responda.
+  - Assim que o primeiro byte `RX > 0` é recebido, o app acelera para a taxa ideal de amostragem (180ms).
+
+### 9.4. Handshake de Inicialização Completo Extraído de `ObdImplment.enterSystem`:
+A sequência agora reproduz 100% dos parâmetros de fábrica:
+1. `[0x81, 0x00, 0x81]` (Raw 3-byte wake-up)
+2. `[0xAA, 0x00, 0x03, 0x02, 0x60, 0x01, 0x81, 0xE1]` (Wakeup Oficial 0x6002)
+3. `[0x83, 0x00, 0x83]` (Raw battery query)
+4. `[0xAA, 0x00, 0x03, 0x02, 0x60, 0x01, 0x83, 0xE3]` (Battery query 0x6002)
+5. `"CAN,std,500k,pin:6+14,07df/07e0/07f0,period:0/2/200/80/1000"` (String de multiplexação oficial)
+6. Sequência AT ELM327 clássica (`ATZ`, `ATE0`, `ATL0`, `ATH0`, `ATSP6`, `0100`).
+
+---
+*Especificação técnica atualizada em 13/nov/2026 com engenharia reversa completa de Dalvik bytecode e libobdcore.so.*
 

@@ -807,7 +807,7 @@
     <div class="brand">
       <h1>🏎️ MULTCAR</h1>
       <span class="badge">Prisma 1.4</span>
-      <span class="badge version-badge" id="appVersionBadge" title="Multcar Pro v1.2.1">v1.2.1 • 10/11 10:45</span>
+      <span class="badge version-badge" id="appVersionBadge" title="Multcar Pro v1.2.2">v1.2.2 • 13/11 08:45</span>
     </div>
     <div class="header-actions">
       <div class="status-badge">
@@ -1790,11 +1790,22 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
     // =========================================================================
     const AD10_NUS = {
       SERVICE: '6e400001-b5a3-f393-e0a9-e50e24dcca9e',
+      CHAR_0002: '6e400002-b5a3-f393-e0a9-e50e24dcca9e',
       CHAR_0003: '6e400003-b5a3-f393-e0a9-e50e24dcca9e',
       CHAR_0004: '6e400004-b5a3-f393-e0a9-e50e24dcca9e',
       TX_CHAR: '6e400004-b5a3-f393-e0a9-e50e24dcca9e',
       RX_CHAR: '6e400003-b5a3-f393-e0a9-e50e24dcca9e'
     };
+
+    const bleLogs = [];
+    function logBle(msg) {
+      const now = new Date();
+      const timeStr = now.toTimeString().split(' ')[0] + '.' + String(now.getMilliseconds()).padStart(3, '0');
+      const entry = `[${timeStr}] ${msg}`;
+      bleLogs.push(entry);
+      if (bleLogs.length > 30) bleLogs.shift();
+      console.log(`[Multcar BLE] ${entry}`);
+    }
 
     let writeCharacteristics = [];
     let notifyCharacteristics = [];
@@ -2006,7 +2017,9 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
       if (rxCountEl) rxCountEl.textContent = rxCount;
 
       const hexArr = Array.from(data).map(b => b.toString(16).padStart(2, '0').toUpperCase());
-      if (lastHexEl) lastHexEl.textContent = hexArr.slice(0, 8).join(' ');
+      const prefix = sourceChar ? `[${sourceChar.slice(-4)}] ` : '';
+      if (lastHexEl) lastHexEl.textContent = prefix + hexArr.slice(0, 6).join(' ');
+      logBle(`RX ${prefix}${hexArr.join(' ')}`);
 
       // Atualiza status se estava configurando
       const statusEl = document.getElementById('telemetryCanStatus');
@@ -2199,13 +2212,16 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
 
     let isNativeBle = false;
     let currentDeviceId = null;
+    let lastWriteInfo = 'Nenhum envio';
+    let preferredWriteChar = AD10_NUS.CHAR_0004;
+    let activeChannelList = [];
 
     /**
-     * Transmite pacote para o XTOOL AD10
-     * Canal de Escrita Exclusivo: NUS CHAR_0004 (6e400004-b5a3-f393-e0a9-e50e24dcca9e)
-     * (O canal 0003 é somente notificação; enviar para 0003 causa GATT_WRITE_NOT_PERMITTED)
+     * Transmite pacote para o XTOOL AD10 com prioridade WRITE (com resposta - igual app oficial)
+     * e fallback automático. Se RX == 0, tenta tanto em 0004 quanto em 0003 para garantir entrega!
      */
     async function sendCanFrame(frameBytes) {
+      if (!frameBytes || frameBytes.length === 0) return;
       try {
         txCount++;
         const txCountEl = document.getElementById('telemetryTxCount');
@@ -2213,18 +2229,33 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
 
         if (isNativeBle && currentDeviceId && window.capacitorCommunityBluetoothLe) {
           const BleClient = window.capacitorCommunityBluetoothLe.BleClient;
-          const targetChar = (writeCharacteristics.length > 0) ? writeCharacteristics[0] : AD10_NUS.CHAR_0004;
+          // Se RX ainda está zerado, tenta escrever em ambos os canais (0004 e 0003) para garantir entrega!
+          const targets = (rxCount === 0) 
+            ? [AD10_NUS.CHAR_0004, AD10_NUS.CHAR_0003] 
+            : [preferredWriteChar];
 
-          for (let i = 0; i < frameBytes.length; i += 20) {
-            const chunk = frameBytes.slice(i, i + 20);
-            const dataView = new DataView(chunk.buffer, chunk.byteOffset, chunk.byteLength);
-            try {
-              await BleClient.writeWithoutResponse(currentDeviceId, AD10_NUS.SERVICE, targetChar, dataView);
-            } catch {
+          for (const charUuid of targets) {
+            for (let i = 0; i < frameBytes.length; i += 20) {
+              const chunk = frameBytes.slice(i, i + 20);
+              const dataView = new DataView(chunk.buffer, chunk.byteOffset, chunk.byteLength);
+
+              let ok = false;
+              // 1º TENTATIVA: write (com resposta - padrão nativo do app oficial XTOOL)
               try {
-                await BleClient.write(currentDeviceId, AD10_NUS.SERVICE, targetChar, dataView);
-              } catch (eWrite) {
-                console.warn('[BLE Write Error]', eWrite);
+                await BleClient.write(currentDeviceId, AD10_NUS.SERVICE, charUuid, dataView);
+                ok = true;
+                lastWriteInfo = `Write OK (${charUuid.slice(4, 8)})`;
+                if (rxCount > 0) preferredWriteChar = charUuid;
+              } catch (eWriteReq) {
+                // 2º TENTATIVA: writeWithoutResponse (fallback se o canal exigir NoResponse)
+                try {
+                  await BleClient.writeWithoutResponse(currentDeviceId, AD10_NUS.SERVICE, charUuid, dataView);
+                  ok = true;
+                  lastWriteInfo = `WriteNoResp OK (${charUuid.slice(4, 8)})`;
+                } catch (eWriteCmd) {
+                  lastWriteInfo = `Erro TX ${charUuid.slice(4, 8)}: ${eWriteReq.message || eWriteCmd.message}`;
+                  logBle(lastWriteInfo);
+                }
               }
             }
           }
@@ -2235,27 +2266,28 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
           for (let i = 0; i < frameBytes.length; i += 20) {
             const chunk = frameBytes.slice(i, i + 20);
             try {
-              if (bleTx.writeValueWithoutResponse) {
-                await bleTx.writeValueWithoutResponse(chunk);
-              } else {
+              if (bleTx.writeValue) {
                 await bleTx.writeValue(chunk);
+              } else if (bleTx.writeValueWithoutResponse) {
+                await bleTx.writeValueWithoutResponse(chunk);
               }
             } catch {
-              try { await bleTx.writeValue(chunk); } catch {}
+              try { await bleTx.writeValueWithoutResponse(chunk); } catch {}
             }
           }
         }
       } catch (err) {
-        console.warn('[BLE TX Error]', err);
+        logBle(`Erro sendCanFrame: ${err.message || err}`);
       }
     }
 
     /**
-     * Handshake e Inicialização Oficial XTOOL AD10:
-     * 1. Acorda o MCU via comando binário oficial 0x6002 -> sub-comando 0x81 (framing 0xAA)
-     * 2. Configura multiplexador interno nos pinos 6 e 14 a 500 kbps (CAN,std,0,pin:6+14...)
-     * 3. Envia sequência ELM universal em caso de dongles clones com bridge ativa
-     * 4. Solicita Tensão de Bateria com comando binário oficial 0x6002 -> sub-comando 0x83
+     * Handshake e Inicialização Oficial XTOOL AD10 (Extraído de libobdcore.so & ObdImplment):
+     * 1. Raw Wakeup bytes [0x81, 0x00, 0x81]
+     * 2. Pacote Binário Oficial 0x6002 -> sub 0x81 [AA 00 03 02 60 01 81 E1]
+     * 3. Leitura direta de voltagem MCU [0x83, 0x00, 0x83] & [AA 00 03 02 60 01 83 E3]
+     * 4. String Oficial XTOOL ObdImplment.enterSystem: "CAN,std,500k,pin:6+14,07df/07e0/07f0,period:0/2/200/80/1000"
+     * 5. Sequência ELM universal para dongles em modo bridge
      */
     async function initAd10Device() {
       const statusEl = document.getElementById('telemetryCanStatus');
@@ -2264,89 +2296,122 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
         statusEl.style.color = 'var(--yellow)';
       }
 
-      showToast('⚙️ Inicializando AD10', 'Ativando MCU XTOOL e transceptor CAN 500k nos pinos 6 e 14...', 'info', 2500);
+      logBle('Iniciando handshake AD10 / CAN 500k...');
+      showToast('⚙️ Inicializando AD10', 'Ativando MCU XTOOL e transceptor CAN 500k nos pinos 6 e 14...', 'info', 2000);
 
       const enc = new TextEncoder();
 
       try {
-        // 1. Wakeup / Init Oficial da MCU do AD10 (Cmd 0x6002 -> sub-comando 0x81 com framing 0xAA)
+        // 1. Wakeup MCU (Raw 3 bytes)
+        await sendCanFrame(new Uint8Array([0x81, 0x00, 0x81]));
+        await new Promise(r => setTimeout(r, 60));
+
+        // 2. Wakeup Oficial AD10 (Framing 0xAA)
         const wakeupPacket = buildAd10Packet(0x6002, [0x01, 0x81]);
         await sendCanFrame(wakeupPacket);
-        await new Promise(r => setTimeout(r, 150));
+        await new Promise(r => setTimeout(r, 80));
 
-        // 2. String de Configuração de Hardware XTOOL (descoberta em libobdcore.so):
-        // Garante multiplexação física dos pinos 6+14 a 500 kbps
-        const canCfg = "CAN,std,0,pin:6+14,07df/07e0/07f0,period:0/2/200/80/1000\r\n";
-        await sendCanFrame(enc.encode(canCfg));
-        await new Promise(r => setTimeout(r, 150));
+        // 3. Consulta de Tensão da Bateria (Hardware AD10)
+        await sendCanFrame(new Uint8Array([0x83, 0x00, 0x83]));
+        await new Promise(r => setTimeout(r, 60));
+        const voltPacket = buildAd10Packet(0x6002, [0x01, 0x83]);
+        await sendCanFrame(voltPacket);
+        await new Promise(r => setTimeout(r, 80));
 
-        // 3. Sequência ELM universal em caso de dongles clones com bridge ativa
+        // 4. String Oficial de Configuração do Hardware XTOOL (ObdImplment.enterSystem):
+        const canCfgOfficial = "CAN,std,500k,pin:6+14,07df/07e0/07f0,period:0/2/200/80/1000";
+        await sendCanFrame(enc.encode(canCfgOfficial));
+        await new Promise(r => setTimeout(r, 60));
+        await sendCanFrame(enc.encode(canCfgOfficial + "\r\n"));
+        await new Promise(r => setTimeout(r, 80));
+
+        // 5. Sequência AT padrão para dongles em bridge ELM327
         const atInit = [
-          "ATZ\r",   // Reset ELM327
-          "ATE0\r",  // Eco desligado
-          "ATL0\r",  // Quebras extras de linha desligadas
-          "ATH0\r",  // Headers desligados
-          "ATSP6\r", // Protocolo 6: ISO 15765-4 CAN (11 bit ID, 500 kbaud)
-          "0100\r"   // Teste de conexão com a ECU do motor
+          "ATZ\r",   // Reset
+          "ATE0\r",  // Eco off
+          "ATL0\r",  // Linhas limpas
+          "ATH0\r",  // Headers off
+          "ATSP6\r", // ISO 15765-4 CAN (11 bit, 500 kbaud)
+          "0100\r"   // PIDs suportados (acorda ECU Delphi GM)
         ];
         for (const at of atInit) {
           await sendCanFrame(enc.encode(at));
-          await new Promise(r => setTimeout(r, 100));
+          await new Promise(r => setTimeout(r, 50));
         }
-
-        // 4. Solicitação Oficial de Tensão de Bateria (Cmd 0x6002 -> sub-comando 0x83 com framing 0xAA)
-        const voltPacket = buildAd10Packet(0x6002, [0x01, 0x83]);
-        await sendCanFrame(voltPacket);
-        await new Promise(r => setTimeout(r, 100));
 
         if (statusEl) {
           statusEl.textContent = 'CAN 500k OK';
           statusEl.style.color = 'var(--green)';
         }
+        logBle('Handshake concluído. Pronto para leitura.');
       } catch (e) {
-        console.warn('[AD10 Init Error]', e);
+        logBle(`Erro no handshake: ${e.message || e}`);
       }
     }
 
+    /**
+     * Loop Inteligente de Amostragem (Proteção Anti-Flood):
+     * Não inunda o dongle se RX == 0. Reenvia handshake a cada 1.5s se não houver resposta.
+     */
     function startPolling() {
       if (isPolling) return;
       isPolling = true;
       pollIndex = 0;
       const enc = new TextEncoder();
 
-      // Executa primeiro a inicialização do protocolo no AD10 e depois inicia o loop
       initAd10Device().then(() => {
         if (!isConnectedBle) return;
-        // Intervalo de 160ms para respeitar a taxa de amostragem da ECU GM Delphi E83
-        pollingInterval = setInterval(async () => {
-          if (!isConnectedBle) return;
+
+        async function pollStep() {
+          if (!isPolling || !isConnectedBle) return;
+
+          // Proteção anti-flood: se já enviou 8 comandos e RX continua 0,
+          // reenvia o handshake e aguarda 1.5s em vez de spammar centenas de comandos!
+          if (rxCount === 0 && txCount >= 8 && txCount % 6 === 0) {
+            logBle(`RX ainda 0 após ${txCount} TX. Reenviando handshake...`);
+            await initAd10Device();
+            pollingInterval = setTimeout(pollStep, 1500);
+            return;
+          }
+
           const item = POLL_QUEUE[pollIndex];
           pollIndex = (pollIndex + 1) % POLL_QUEUE.length;
-          if (!item) return;
 
-          // 1. Envia Frame CAN Nativo XTOOL AD10 com enquadramento oficial 0xAA:
-          // Sub-comando 0x80 (send_can_id) + CAN ID 0x07DF (11-bit) + 8 bytes de dados ISO 15765-4
-          const can12 = [
-            0x01, 0x80,                      // Sub-comando 0x80
-            0xDF, 0x07, 0x00, 0x00,          // CAN ID 0x07DF (broadcast OBD2)
-            0x02, item.mode, item.pid,       // ISO 15765-4 Single Frame (len=2, mode, pid)
-            0x00, 0x00, 0x00, 0x00, 0x00     // Padding de 8 bytes
-          ];
-          const ad10Frame = buildAd10Packet(0x6002, can12);
-          await sendCanFrame(ad10Frame);
+          if (item) {
+            try {
+              // 1. Frame CAN Nativo XTOOL AD10 com padding 0x55 (GM SPE/4 Delphi):
+              const can12 = [
+                0x01, 0x80,                      // Sub-comando 0x80 (send_can_id)
+                0xDF, 0x07, 0x00, 0x00,          // CAN ID 0x07DF (broadcast universal)
+                0x02, item.mode, item.pid,       // Single Frame (len=2, mode, pid)
+                0x55, 0x55, 0x55, 0x55, 0x55     // Padding padrão GM Delphi
+              ];
+              const ad10Frame = buildAd10Packet(0x6002, can12);
+              await sendCanFrame(ad10Frame);
 
-          // 2. Envia também formato ASCII caso o dongle esteja em bridge ELM327 ("010C\r")
-          if (item.cmd) {
-            await new Promise(r => setTimeout(r, 30));
-            await sendCanFrame(enc.encode(item.cmd));
+              // 2. Se RX ainda estiver em 0, envia também o comando ASCII para cobrir bridge ELM327
+              if (rxCount === 0 && item.cmd) {
+                await new Promise(r => setTimeout(r, 40));
+                await sendCanFrame(enc.encode(item.cmd));
+              }
+            } catch (ePoll) {
+              logBle(`Erro no poll: ${ePoll.message || ePoll}`);
+            }
           }
-        }, 160);
+
+          // Intervalo adaptativo: 180ms com dados ativos; 400ms se ainda esperando
+          const delay = (rxCount > 0) ? 180 : 400;
+          pollingInterval = setTimeout(pollStep, delay);
+        }
+
+        pollStep();
       });
     }
 
     function stopPolling() {
       isPolling = false;
       if (pollingInterval) {
+        clearTimeout(pollingInterval);
         clearInterval(pollingInterval);
         pollingInterval = null;
       }
@@ -2359,6 +2424,7 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
       currentDeviceId = null;
       writeCharacteristics = [];
       notifyCharacteristics = [];
+      activeChannelList = [];
       stopPolling();
       connDot.className = 'dot';
       connText.textContent = 'Off';
@@ -2372,6 +2438,7 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
         statusEl.style.color = 'var(--text-dim)';
       }
       if (chEl) chEl.textContent = '--';
+      logBle('Dispositivo desconectado.');
     }
 
     async function disconnectBle() {
@@ -2395,63 +2462,84 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
     function showBleDiagnosticInfo() {
       const dev = currentDeviceId || (bleDevice ? bleDevice.name : 'Nenhum');
       const can = document.getElementById('telemetryCanStatus')?.textContent || '--';
+      const recentLogs = bleLogs.slice(-6).join('<br>');
       const msg = `
-        <strong>Versão do App:</strong> v1.2.1 (Build 10/11/2026 10:45) [Framing Binário AD10 Oficial]<br>
+        <strong>Versão do App:</strong> v1.2.2 (Build 13/11/2026 08:45) [Dual-Channel GATT & Sync]<br>
         <strong>Dispositivo:</strong> ${dev}<br>
         <strong>CAN Status:</strong> ${can}<br>
-        <strong>Pacotes TX (Enviados):</strong> ${txCount}<br>
-        <strong>Pacotes RX (Recebidos):</strong> ${rxCount}<br>
+        <strong>Notificações Ativas:</strong> ${activeChannelList.join(' + ') || 'Nenhuma'}<br>
+        <strong>Último Write:</strong> ${lastWriteInfo}<br>
+        <strong>Pacotes TX:</strong> ${txCount} | <strong>Pacotes RX:</strong> ${rxCount}<br>
         <strong>Último Hex:</strong> ${document.getElementById('telemetryLastHex')?.textContent || '--'}<br><br>
-        <strong>Diagnóstico BLE:</strong><br>${bleDiscoverySummary}
+        <strong>Histórico Recente BLE:</strong><br><small style="font-family: monospace;">${recentLogs || 'Nenhum evento registrado'}</small>
       `;
-      showToast('📊 Diagnóstico BLE', msg, 'info', 9000);
+      showToast('📊 Diagnóstico BLE', msg, 'info', 10000);
     }
 
     /**
-     * Mapeamento dinâmico de serviços GATT e ativação de notificações no canal RX oficial
-     * No XTOOL AD10:
-     * - Escuta NOTIFICAÇÃO em 6E400003
-     * - Envia ESCRITA em 6E400004
+     * Mapeamento dinâmico de serviços GATT e ativação de notificações MULTI-CANAL
+     * Reproduz exatamente o app oficial XTOOL (BleConnector$3):
+     * - Ativa notificações em 6E400003 E 6E400004 simultaneamente!
      */
     async function setupBleGattAndListeners(deviceId) {
       const BleClient = window.capacitorCommunityBluetoothLe.BleClient;
-      writeCharacteristics = [AD10_NUS.CHAR_0004];
-      notifyCharacteristics = [AD10_NUS.CHAR_0003];
+      activeChannelList = [];
 
-      showToast('🔍 Configurando BLE', 'Ativando canal RX de dados da ECU...', 'info', 2000);
+      showToast('🔍 Configurando BLE', 'Descobrindo serviços e ativando canais RX...', 'info', 2000);
 
       // 1. Descoberta obrigatória de serviços no Android GATT
       try {
         if (typeof BleClient.discoverServices === 'function') {
           await BleClient.discoverServices(deviceId);
-          console.log('[BLE] discoverServices executado com sucesso');
+          logBle('discoverServices concluído com sucesso');
         }
       } catch (eDisc) {
-        console.warn('[BLE] discoverServices aviso:', eDisc);
+        logBle(`discoverServices aviso: ${eDisc.message || eDisc}`);
       }
 
-      // 2. Registra Notificações EXCLUSIVAMENTE no canal RX oficial do AD10 (0003)
-      let activeCount = 0;
+      // 2. Registra Notificações no Canal 0003 (Read Oficial XTOOL)
       try {
         await BleClient.startNotifications(deviceId, AD10_NUS.SERVICE, AD10_NUS.CHAR_0003, (val) => {
           const bytes = safeExtractBytes(val);
-          processIncomingCanBytes(bytes, AD10_NUS.CHAR_0003);
+          processIncomingCanBytes(bytes, '0003');
         });
-        activeCount++;
-        console.log(`[BLE] startNotifications SUCESSO no canal RX: ${AD10_NUS.CHAR_0003}`);
-      } catch (errNotif) {
-        console.warn(`[BLE] Falha ao registrar notificação em 0003:`, errNotif);
+        activeChannelList.push('0003');
+        logBle('Notificação registrada com SUCESSO em 0003');
+      } catch (err0003) {
+        logBle(`Falha notif 0003: ${err0003.message || err0003}`);
       }
 
+      // 3. Registra Notificações no Canal 0004 (Write/Notify Oficial XTOOL)
+      try {
+        await BleClient.startNotifications(deviceId, AD10_NUS.SERVICE, AD10_NUS.CHAR_0004, (val) => {
+          const bytes = safeExtractBytes(val);
+          processIncomingCanBytes(bytes, '0004');
+        });
+        activeChannelList.push('0004');
+        logBle('Notificação registrada com SUCESSO em 0004');
+      } catch (err0004) {
+        logBle(`Falha notif 0004: ${err0004.message || err0004}`);
+      }
+
+      // 4. Também tenta canal 0002 se presente
+      try {
+        await BleClient.startNotifications(deviceId, AD10_NUS.SERVICE, AD10_NUS.CHAR_0002, (val) => {
+          const bytes = safeExtractBytes(val);
+          processIncomingCanBytes(bytes, '0002');
+        });
+        activeChannelList.push('0002');
+        logBle('Notificação registrada com SUCESSO em 0002');
+      } catch {}
+
       const chEl = document.getElementById('telemetryChannels');
-      if (chEl) chEl.textContent = `${activeCount} ch`;
+      if (chEl) chEl.textContent = activeChannelList.length > 0 ? activeChannelList.join('+') : '0 ch';
 
-      bleDiscoverySummary = `Serviço NUS: OK | Canal RX: ${AD10_NUS.CHAR_0003.slice(4, 8)} | Canal TX: ${AD10_NUS.CHAR_0004.slice(4, 8)}`;
+      bleDiscoverySummary = `Serviço NUS: OK | Canais Notif: [${activeChannelList.join(', ')}] | TX: 0004/0003`;
 
-      if (activeCount === 0) {
-        showToast('⚠️ Notificações BLE', 'Nenhum canal de resposta aceitou registro de notificação.', 'warning', 4000);
+      if (activeChannelList.length === 0) {
+        showToast('⚠️ Notificações BLE', 'Nenhum canal aceitou registro de notificação.', 'warning', 4000);
       } else {
-        showToast('🛰️ AD10 Conectado!', `Canal RX ativo! Pronto para receber dados da ECU GM.`, 'success', 3000);
+        showToast('🛰️ AD10 Conectado!', `Canais ativos: [${activeChannelList.join(' + ')}]! Lendo ECU GM...`, 'success', 3000);
       }
     }
 
