@@ -58,6 +58,7 @@ Outros comandos úteis:
 
 ## 📚 Documentação Técnica Detalhada
 
+* 🤖 [Guia Mestre de Contexto para Agentes de IA](CONTEXTO_AGENTE_IA.md) — *Leitura obrigatória para qualquer IA entender todo o histórico e onde paramos*
 * 📘 [Relatório Completo do Projeto](RELATORIO_COMPLETO_PROJETO_MULTCAR.md)
 * 🛰️ [Handoff e Próximos Passos](PROXIMO_PASSO_OBD2_CAR_SCANNER.md)
 * 📖 [Guia de Deploy na VPS](GUIA_DEPLOY_VPS.md)
