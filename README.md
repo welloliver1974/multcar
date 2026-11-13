@@ -46,9 +46,10 @@ Outros comandos úteis:
 
 ## 📱 Como Utilizar no Celular ou Multimídia
 
-1. **Via APK Android Nativo:**
-   * Baixe o instalador gerado: [`Multcar_Pro_v1.0.apk`](file:///E:/Apps/Multcar/Multcar_Pro_v1.0.apk).
+1. **Via APK Android Nativo (v1.2.4 — Build 13/11 14:10):**
+   * Baixe o instalador mais recente: [`Multcar_Pro_v1.2.apk`](file:///E:/Apps/Multcar/Multcar_Pro_v1.2.apk) (ou [`Multcar_Pro_v1.0.apk`](file:///E:/Apps/Multcar/Multcar_Pro_v1.0.apk)).
    * Instale na central multimídia K2401 ou no celular Android.
+   * Suporte nativo ao modo **`⚡ AD10 Nativo`** com ativação de transceptores CAN (`systerm enter`), além do modo **`⚡ ELM327 Universal`** selecionável com 1 toque.
 2. **Via PWA (Navegador Chrome):**
    * Acesse `https://seu-dominio-multcar.com` pelo Chrome no Android.
    * Toque no botão **"📲 Instalar"** para adicionar o app à tela inicial.

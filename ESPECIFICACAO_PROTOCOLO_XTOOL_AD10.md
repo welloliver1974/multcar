@@ -254,5 +254,82 @@ Na v1.2.1, o app enviava pacotes binários `0xAA ... 0x6002` seguidos de comando
    - Botão **[⚡ AD10 Nativo]** / **[⚡ ELM327 Universal]** presente diretamente na Barra de Telemetria e no modal de diagnóstico, permitindo ao usuário testar ambos os protocolos no carro com um simples toque na tela.
 
 ---
-*Especificação técnica atualizada em 13/nov/2026 (v1.2.3).*
+
+## 11. Engenharia Reversa do Firmware MCU (`ble_obd.bin`) & Ativação de Hardware CAN (`systerm enter`) — v1.2.4 (13/nov/2026 14:10)
+
+Na versão v1.2.4, a desmontagem profunda do binário ARM Cortex-M Thumb `ble_obd.bin` (extraído da pasta de recursos do aplicativo oficial XTOOL AD10) revelou o mecanismo exato de inicialização dos transceptores CAN físicos e a confirmação definitiva da ausência de emulação ELM327.
+
+### 11.1. Prova Empírica: Incompatibilidade Total com Car Scanner & Apps ELM327
+Em testes práticos realizados no Chevrolet Prisma 2015, o aplicativo universal **Car Scanner ELM OBD2** não conseguiu sequer estabelecer sessão de comando com o XTOOL AD10:
+- O Car Scanner conecta no nível BLE GATT, mas ao enviar `ATZ`, `ATE0` ou `ATSP0`, não recebe nenhuma resposta (`NO DATA` / `TIMEOUT`).
+- Isso confirma 100% a análise de código de `ble_obd.bin`: o microcontrolador do AD10 **não possui interpretador AT**. Toda a comunicação é estritamente estruturada em frames binários proprietários que iniciam com `0xAA` (App -> Dongle) e respondem com `0xAB` (Dongle -> App).
+
+### 11.2. Desmontagem da Tabela de Despacho `0x6002` no Microcontrolador
+A análise estática do despachante na memória Flash do MCU (`0x08009c38` - `0x08009ce8`) revelou o mapa completo de funções nativas:
+
+| Sub-Comando | Endereço Flash | Rotina Interna | Log Firmware | Função e Efeito no Hardware |
+| :---: | :---: | :---: | :---: | :--- |
+| **`0x01`** | `0x080063c5` | `systerm enter` | `[ble] systerm enter` | **Ativação dos transceptores CAN.** Alimenta o circuito do driver CAN e fecha o circuito dos pinos 6 (CAN-H) e 14 (CAN-L). |
+| **`0x02`** | `0x08006b1d` | `obd_protocol` | `[ble] obd_protocol %d` | Grava o protocolo na struct de RAM `0x20000f28`. Valor `1` = `ISO15765-4 STD 500K` (mapeado em `com.xtool.common.ObdProtocol`); valor `6` = CAN standard. |
+| **`0x03`** | `0x08006791` | `bps` | `[ble] bps %d` | Configura o registrador de baud rate do transceptor CAN para `500000` bps (0x0007A120). |
+| **`0x80`** | `0x08006bd1` | `send_can_id` | `[ble] send_can_id :%d` | Transmite frame CAN 11-bit no barramento (CAN ID `0x07DF` para ECU do Prisma). |
+| **`0x81`** | `0x08006ce9` | `protocol_volt` | `[ble] protocol_volt : %d` | Dispara conversão ADC interna do MCU para medir a voltagem real da bateria do veículo. |
+| **`0x82`** | `0x08006cb1` | `protocol_version` | `[ble] protocol_version : %s` | Retorna a versão de firmware compilada no AD10. |
+| **`0x83`** | `0x08006c2d` | `protocol_sn` | `[ble] protocol_sn : %s` | Retorna a identificação e número de série gravados no hardware. |
+
+### 11.3. A Sequência de Ativação de Fábrica do AD10 (`initAd10Device`)
+Na v1.2.4, a função de inicialização nativa no Multcar Pro passou a reproduzir com exatidão matemática o fluxo do driver oficial C++ (`CAD10Prot::InitHardware`):
+
+1. **Wake-up & Leitura de Tensão ADC da Bateria (`0x81`):**
+   ```text
+   Envio: [0xAA, 0x00, 0x03, 0x02, 0x60, 0x01, 0x81, 0xE1]
+   Resposta: [0xAB, 0x00, 0x05, 0x02, 0x60, 0x01, 0x81, HighByte, LowByte, CHK]
+   Cálculo: Tensão = ((HighByte * 256) + LowByte) / 1000.0 V
+   ```
+2. **Consulta de Versão de Firmware (`0x82`):**
+   ```text
+   Envio: [0xAA, 0x00, 0x03, 0x02, 0x60, 0x01, 0x82, 0xE2]
+   ```
+3. **Seleção de Protocolo ISO 15765-4 STD 500K (`0x02` com valor `1` e `6`):**
+   ```text
+   Envio Prot 1: [0xAA, 0x00, 0x04, 0x02, 0x60, 0x01, 0x02, 0x01, 0x66]
+   Envio Prot 6: [0xAA, 0x00, 0x04, 0x02, 0x60, 0x01, 0x02, 0x06, 0x61]
+   ```
+4. **Configuração do Baud Rate CAN para 500 kbps (`0x03`):**
+   ```text
+   Payload: [0x01, 0x03, 0x00, 0x07, 0xA1, 0x20] (500000 em 32-bit big-endian)
+   Envio: [0xAA, 0x00, 0x08, 0x02, 0x60, 0x01, 0x03, 0x00, 0x07, 0xA1, 0x20, CHK]
+   ```
+5. **Despertar do Transceptor Físico (`0x01` — `systerm enter`):**
+   ```text
+   Envio: [0xAA, 0x00, 0x03, 0x02, 0x60, 0x01, 0x01, 0xE3]
+   ```
+   *Após esse comando, o transceptor CAN do AD10 passa a transmitir os frames recebidos via BLE diretamente para as linhas de dados da ECU Delphi do Prisma 1.4.*
+
+### 11.4. Transmissão de PIDs via CAN 11-bit (`send_can_id` — `0x80`)
+Para solicitar telemetria à ECU (Ex: RPM — PID `0x0C`):
+```
+Pacote BLE:
+AA 00 0F 02 60 01 80 DF 07 00 00 02 01 0C 55 55 55 55 55 <CHK>
+```
+- `0x01, 0x80`: Sub-comando `send_can_id`.
+- `0xDF, 0x07, 0x00, 0x00`: CAN ID `0x000007DF` (Standard 11-bit Broadcast em Little-Endian).
+- `0x02`: Comprimento útil ISO-TP (2 bytes: Mode + PID).
+- `0x01`: Mode 01 (Dados em tempo real).
+- `0x0C`: PID solicitado (RPM).
+- `0x55, 0x55, 0x55, 0x55, 0x55`: Padding GM Delphi de 8 bytes completos.
+
+### 11.5. Recepção e Decodificação de Respostas (`0xAB`)
+A ECU Delphi responde via CAN ID `0x7E8`. O AD10 encapsula o frame e notifica o app na característica `6E400003`:
+```
+Pacote BLE Recebido:
+AB 00 10 02 60 01 80 E8 07 00 00 04 41 0C 0F A0 55 55 <CHK>
+```
+- `0x41, 0x0C`: Resposta positiva ao Modo 01, PID `0x0C`.
+- `0x0F, 0xA0`: Bytes A e B de RPM.
+- Cálculo: $((0x0F \times 256) + 0xA0) / 4 = (3840 + 160) / 4 = 1000\text{ RPM}$.
+
+---
+*Especificação técnica atualizada em 13/nov/2026 (v1.2.4 — Build 14:10).*
+
 

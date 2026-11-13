@@ -71,9 +71,13 @@ Para desvendar a comunicação, o APK oficial `AD10EN_V2.0.3_C203.apk` (60.6 MB)
      *Isso comprovou matematicamente por que comandos ASCII ("ATZ", "010C") geravam `TX > 0` e `RX = 0` no carro: eram descartados como ruído pelo MCU.*
    * **Tabela de Comandos do Firmware (`0x08009cb0`):**
      - `0x6002`: Despachante principal de comandos para o transceptor CAN.
-       - Sub-comando `0x81` (`0x08006ce9`): Despertar e inicialização da MCU (`[ble] protocol_volt : %d`).
-       - Sub-comando `0x83` (`0x08006c2d`): Leitura direta da tensão da bateria medida internamente pelo circuito do AD10 (`[ble] protocol_volt : %d`).
+       - Sub-comando `0x01` (`0x080063c5`): Ativação física dos transceptores CAN (`[ble] systerm enter`). Comuta a alimentação e chaveia os pinos 6 e 14 da porta OBD2.
+       - Sub-comando `0x02` (`0x08006b1d`): Configuração do protocolo OBD2 (`[ble] obd_protocol %d`). Valor `1` = `ISO15765-4 STD 500K` (usado na enum `ObdProtocol` oficial); valor `6` = CAN standard.
+       - Sub-comando `0x03` (`0x08006791`): Configuração de baud rate do CAN controller (`[ble] bps %d` -> 500.000 bps).
        - Sub-comando `0x80` (`0x08006bd1`): Envio de Frame CAN no barramento físico (`[ble] send_can_id :%d`).
+       - Sub-comando `0x81` (`0x08006ce9`): Leitura ADC direta da tensão da bateria medida internamente pela MCU (`[ble] protocol_volt : %d`).
+       - Sub-comando `0x82` (`0x08006cb1`): Versão de firmware gravada no dongle (`[ble] protocol_version : %s`).
+       - Sub-comando `0x83` (`0x08006c2d`): Número de série do hardware gravado no AD10 (`[ble] protocol_sn : %s`).
      - `0x6004` (`0x08005d55`): Configuração de filtros de hardware CAN.
    * **Algoritmo de Checksum (`0x5498`):**
      - Loop XOR de todos os bytes de dados (`eors r0, r3`), excluindo o delimitador `0xAA` e o byte final de verificação.
@@ -549,5 +553,5 @@ Para facilitar a manutenção contínua e eliminar comandos longos no terminal d
   - **APK Gerado:** [`Multcar_Pro_v1.1.apk`](file:///E:/Apps/Multcar/Multcar_Pro_v1.1.apk) (4.26 MB) com `versionCode 2`.
 
 ---
-*Relatório atualizado em 13/nov/2026 com Multcar Pro v1.2.3, Conexão GATT Estável, Modo Dual AD10/ELM327 e sincronização Git.*
+*Relatório atualizado em 13/nov/2026 com Multcar Pro v1.2.4 (Build 14:10), Ativação de Hardware CAN (`systerm enter`), Conexão GATT Estável, Modo Dual AD10/ELM327 e sincronização Git.*
 
