@@ -480,6 +480,32 @@ Para facilitar a manutenção contínua e eliminar comandos longos no terminal d
 
 ## 14. Histórico de Versões e Builds
 
+- **v1.2.3 (Build 13/11/2026 11:00) — Conexão GATT Rock-Solid, Separação Estrita de Protocolos e Seletor Dual-Mode em 1 Toque:**
+  - **Eliminação Total da Regressão "Conecta e Cai" / Loop de Status "Configurando...":**
+    - Identificada a causa da desconexão imediata na v1.2.2: `startNotifications` em `6E400004` (Write-Only, sem descritor CCCD `0x2902`) gerava `GATT 133` / status `0x13` na pilha Android, derrubando o link BLE logo após a conexão.
+    - Canal de notificação revertido para ser **exclusivamente `6E400003`** (único dotado de CCCD `0x2902`). Conexão GATT 100% estável e contínua.
+    - Canal de transmissão padronizado **estritamente em `6E400004`** com prioridade `BleClient.write` (com resposta) e fallback para `writeWithoutResponse`. Removidas tentativas de escrita em `0003` (`GATT_WRITE_NOT_PERMITTED`).
+    - Removido o loop agressivo que reinvocava `initAd10Device()` a cada 6 quadros no polling, eliminando a oscilação do status para *"Configurando..."*.
+  - **Engenharia Reversa Completa do Firmware MCU (`ble_obd.bin`) & Tabela de Sub-Comandos `0x6002`:**
+    - Localizada a tabela mestre de despacho em `0x08009c38` no microcontrolador ARM Cortex-M:
+      - `0x80`: `send_can_id` (Transmissão de frame CAN 11-bit padrão OBD2 `0x07DF`).
+      - `0x81`: `protocol_volt` (Leitura analógica da bateria medida internamente pela MCU).
+      - `0x82`: `protocol_version` (Versão de firmware da MCU).
+      - `0x83`: `protocol_sn` (Número de série do hardware).
+      - `0x02`: `obd_protocol` (Seleção de protocolo ISO 15765-4 CAN 11b/500k = valor `6`).
+      - `0x03`: `bps` (Configuração de baud rate do barramento CAN = valor `500000`).
+  - **Separação Completa entre Binário AD10 e ASCII ELM327:**
+    - Descoberta da causa de `RX = 0` na v1.2.1: a mistura de pacotes binários `0xAA` com comandos ASCII `"010C\r"` no mesmo canal UART corrompia a máquina de estados `ble_protocol_analy_char` (`0x3b44`), disparando `checksum error` e descartando respostas.
+    - No modo **AD10 Nativo**, o app envia única e exclusivamente frames binários `buildAd10Packet(0x6002, ...)`. Zero ruído ASCII.
+    - No modo **ELM327 Universal**, o app envia estritamente comandos AT ASCII limpos terminados em `\r`. Zero bytes binários.
+  - **Seletor de Modo OBD em 1 Toque na Interface:**
+    - Botão interativo **[⚡ AD10 Nativo]** / **[⚡ ELM327 Univ]** embutido na Barra de Telemetria e no modal de diagnóstico, permitindo ao usuário comutar o protocolo instantaneamente durante o teste no veículo.
+  - **Identificação Visual:** Badge no topo `v1.2.3 • 13/11 11:00`.
+  - **APK Gerado:** [`Multcar_Pro_v1.2.apk`](file:///E:/Apps/Multcar/Multcar_Pro_v1.2.apk) e [`Multcar_Pro_v1.0.apk`](file:///E:/Apps/Multcar/Multcar_Pro_v1.0.apk) (4.26 MB) com `versionCode 6`, `versionName 1.2.3`.
+
+- **v1.2.2 (Build 13/11/2026 08:45):**
+  - Implementação de `WRITE_TYPE_DEFAULT` com fallback e tentativa experimental de subscrição multi-canal.
+
 - **v1.2.1 (Build 10/11/2026 10:45) — Framing Binário Nativo Oficial XTOOL AD10:**
   - **Descoberta Forense no Firmware do MCU (`ble_obd.bin`) e Driver C++ (`libobdcore.so`):**
     - A desmontagem minuciosa em Assembly ARM Cortex-M Thumb revelou que o microcontrolador do AD10 descarta qualquer byte que não seja precedido pelo delimitador oficial `0xAA` (função `ble_protocol_analy_char` no endereço `0x3af0`).
@@ -517,5 +543,5 @@ Para facilitar a manutenção contínua e eliminar comandos longos no terminal d
   - **APK Gerado:** [`Multcar_Pro_v1.1.apk`](file:///E:/Apps/Multcar/Multcar_Pro_v1.1.apk) (4.26 MB) com `versionCode 2`.
 
 ---
-*Relatório atualizado em 10/nov/2026 com Multcar Pro v1.2.0, Correção Definitiva BLE Nordic UART AD10 e sincronização Git.*
+*Relatório atualizado em 13/nov/2026 com Multcar Pro v1.2.3, Conexão GATT Estável, Modo Dual AD10/ELM327 e sincronização Git.*
 

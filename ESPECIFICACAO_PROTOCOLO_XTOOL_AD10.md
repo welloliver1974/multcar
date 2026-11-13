@@ -212,5 +212,47 @@ A sequência agora reproduz 100% dos parâmetros de fábrica:
 6. Sequência AT ELM327 clássica (`ATZ`, `ATE0`, `ATL0`, `ATH0`, `ATSP6`, `0100`).
 
 ---
-*Especificação técnica atualizada em 13/nov/2026 com engenharia reversa completa de Dalvik bytecode e libobdcore.so.*
+
+## 10. Resolução Definitiva da Regressão GATT e Separação Estrita de Protocolos (v1.2.3 • 13/nov/2026)
+
+Na versão v1.2.2, a tentativa de subscrever simultaneamente em múltiplos canais gerou um loop de desconexão (*"conecta e cai"* e status preso em *"Configurando..."*). A desmontagem forense profunda de `ble_obd.bin`, `classes.dex` e `libobdcore.so` revelou a mecânica exata:
+
+### 10.1. A Causa do Loop "Conecta e Cai" (GATT 133 / Status 0x13)
+1. **Ausência de Descritor CCCD na Característica 0004:**
+   - A característica `6E400004-B5A3-F393-E0A9-E50E24DCCA9E` possui propriedades estritas `WRITE` e `WRITE_NO_RESPONSE`. Ela **NÃO POSSUI** o descritor CCCD `0x2902` (`Client Characteristic Configuration Descriptor`).
+   - Quando o app invocava `BleClient.startNotifications(..., CHAR_0004)`, o Android ou o firmware do AD10 rejeitava a escrita no CCCD inexistente, disparando `GATT 133` ou status `0x13 (Connection Terminated by Peer User)`, derrubando o link BLE imediatamente.
+   - O app tentava reconectar pelo MAC salvo (`lastMac`), registrava novamente em `0004`, e caía outra vez em loop infinito.
+2. **Escrita Ilegal em Canal Read-Only (0003):**
+   - No envio de pacotes, a tentativa de escrever em `6E400003` disparava `GATT_WRITE_NOT_PERMITTED`, pois `0003` é exclusivamente `NOTIFY / READ`.
+3. **Flapping de Status no Polling:**
+   - A cada 6 frames sem RX, o app reinvocava `initAd10Device()`, jogando o status na tela para *"Configurando..."* e enviando novos resets para um link que já estava instável.
+
+### 10.2. Mapeamento Completo da Tabela de Sub-Comandos `0x6002` no Firmware (`ble_obd.bin`)
+A análise estática do despachante na flash do microcontrolador (`0x08009c38` a `0x08009ce8`) confirmou o mapa de funções nativas:
+
+| Sub-Comando | Função Firmware | String de Log Firmware | Descrição e Parâmetros |
+| :--- | :--- | :--- | :--- |
+| `0x80` | `0x8006bd1` | `[ble] send_can_id :%d` | Envio de frame CAN 11-bit padrão OBD2 (`0x07DF`) |
+| `0x81` | `0x8006ce9` | `[ble] protocol_volt : %d` | Leitura da tensão da bateria medida internamente pela MCU |
+| `0x82` | `0x8006cb1` | `[ble] protocol_version : %s` | Leitura da versão de firmware gravada no AD10 |
+| `0x83` | `0x8006c2d` | `[ble] protocol_sn : %s` | Leitura do número de série gravado no hardware |
+| `0x02` | `0x8006b1d` | `[ble] obd_protocol %d` | Seleção do protocolo OBD (Valor `6` = ISO 15765-4 CAN) |
+| `0x03` | `0x8006791` | `[ble] bps %d` | Seleção do baud rate do transceptor CAN (`500000` bps) |
+
+### 10.3. A Causa do "RX = 0" na v1.2.1: Mistura Destrutiva de Binário e ASCII
+Na v1.2.1, o app enviava pacotes binários `0xAA ... 0x6002` seguidos de comandos texto `"010C\r"` e `"ATZ\r"` no mesmo canal UART serial do AD10.
+- Na máquina de estados `ble_protocol_analy_char` (`0x3b44` em `ble_obd.bin`), caracteres ASCII sem `0xAA` inicial acionam `checksum error` ou `packet overflow !!!`, travando o parser.
+- Se o adaptador opera em bridge ELM327, bytes binários `0xAA` corrompem o buffer AT.
+
+### 10.4. Arquitetura Definitiva Implementada na v1.2.3:
+1. **Canal de Notificação Único e Seguro:** Subscrição exclusivamente em `6E400003` (o único com CCCD `0x2902`). Conexão GATT 100% sólida e sem desconexões.
+2. **Canal de Envio Único:** Transmissão exclusivamente em `6E400004` com prioridade `BleClient.write` (com resposta) e fallback para `writeWithoutResponse`.
+3. **Separação Estrita de Protocolos:**
+   - **Modo AD10 Nativo:** Apenas frames binários puros `buildAd10Packet(0x6002, ...)`. Zero caracteres ASCII no canal.
+   - **Modo ELM327 Universal:** Apenas comandos AT ASCII puros (`010C\r`). Zero bytes binários.
+4. **Seletor de Modo com 1 Toque na Interface:**
+   - Botão **[⚡ AD10 Nativo]** / **[⚡ ELM327 Universal]** presente diretamente na Barra de Telemetria e no modal de diagnóstico, permitindo ao usuário testar ambos os protocolos no carro com um simples toque na tela.
+
+---
+*Especificação técnica atualizada em 13/nov/2026 (v1.2.3).*
 
