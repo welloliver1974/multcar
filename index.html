@@ -2227,34 +2227,48 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
     function handleAd10CanFrame(payload) {
       if (!payload.length) return;
 
-      // 1) Tenta localizar o ID CAN (11 bits, big-endian) e os dados depois dele
-      let dataStart = -1;
+      // Log do ID CAN, se presente no payload (2 bytes big-endian)
       for (let i = 0; i + 1 < payload.length; i++) {
         const id = ((payload[i] << 8) | payload[i + 1]) & 0xFFFF;
         if (id === 0x07E0 || id === 0x07E8 || id === 0x07DF) {
-          dataStart = i + 2;
-          logBle(`🛰️ Frame CAN ID 0x${id.toString(16).toUpperCase()} dados=[${hexDump(payload.slice(dataStart))}]`);
+          logBle(`🛰️ Frame CAN ID 0x${id.toString(16).toUpperCase()} bruto=[${hexDump(payload)}]`);
           break;
         }
       }
-      if (dataStart < 0) dataStart = 1;   // fallback: pula o byte de tamanho
 
-      // 2) Procura respostas OBD2 Modo 01 (0x41) / Modo 03 (0x43) / Modo 04 (0x44)
-      const data = payload.slice(dataStart);
-      for (let i = 0; i < data.length - 1; i++) {
-        const mode = data[i];
-        if (mode === 0x41) {
-          const pid = data[i + 1];
-          const a = data[i + 2] ?? 0;
-          const b = data[i + 3] ?? 0;
-          handleObdPidResponse(pid, a, b);
+      // Localiza a resposta OBD2 dentro do payload.
+      // Padrão ISO-TP Single Frame: [len][0x41][PID][A][B]…
+      // O byte "len" pode vir antes ou depois de um byte de DLC, por isso
+      // procuramos o padrão pelo comprimento declarado.
+      let idx = -1;
+      for (let j = 1; j < payload.length; j++) {
+        const declared = payload[j - 1];
+        if (payload[j] === 0x41 && declared >= 2 && declared <= 0x40 &&
+            (payload.length - j) >= declared) { idx = j; break; }
+      }
+      if (idx < 0) {
+        // Fallback: qualquer byte de modo 0x41 (sem validação de comprimento)
+        for (let j = 0; j < payload.length; j++) {
+          if (payload[j] === 0x41) { idx = j; break; }
+        }
+      }
+
+      if (idx >= 0) {
+        const pid = payload[idx + 1] ?? 0;
+        const a = payload[idx + 2] ?? 0;
+        const b = payload[idx + 3] ?? 0;
+        logBle(`📊 Resposta OBD2: modo=41 PID=0x${pid.toString(16).toUpperCase().padStart(2, '0')} A=0x${a.toString(16).toUpperCase().padStart(2, '0')} B=0x${b.toString(16).toUpperCase().padStart(2, '0')}`);
+        handleObdPidResponse(pid, a, b);
+        return;
+      }
+
+      // Modo 03 (DTCs) / Modo 04 (limpeza)
+      for (let j = 0; j < payload.length; j++) {
+        if (payload[j] === 0x43) {
+          renderDtcResults(new Uint8Array(payload.slice(j + 1)));
           break;
         }
-        if (mode === 0x43) {
-          renderDtcResults(new Uint8Array(data.slice(i + 1)));
-          break;
-        }
-        if (mode === 0x44) {
+        if (payload[j] === 0x44) {
           const dtcCleanEl = document.getElementById('dtcList');
           if (dtcCleanEl) {
             dtcCleanEl.innerHTML = `
