@@ -1,5 +1,20 @@
 # 📘 Relatório Completo do Projeto Multcar Pro
 
+> ## 🚨 CORREÇÃO (13/11/2026, v1.2.5) — AS SEÇÕES 3 e 4 DESTE RELATÓRIO ESTÃO SUPERADAS
+>
+> Este relatório foi escrito com um **decodificador manual de Thumb caseado**, e a seção do
+> protocolo (seções 3 e 4) **errou em pontos que impediam o app de ler o carro**:
+>
+> - ❌ ID do comando em **little-endian** → é **big-endian** (`frame[3]`=MSB, `frame[4]`=LSB).
+> - ❌ Resposta do dongle começando em `0xAB` → é **`0x55`** (escape `0x56`).
+> - ❌ Sub-comandos do `0x6002` (`0x81`=volt, `0x82`=versão) → são **`0x80`=volt, `0x81`=versão, `0x82`=SN**.
+> - ❌ `systerm enter` como sub-comando do `0x6002` → é o comando de nível superior **`0x6009`**.
+>
+> ✅ **Especificação correta e reverificada:** [`PROTOCOLO_AD10_REVERIFICADO.md`](PROTOCOLO_AD10_REVERIFICADO.md)
+> (validada no firmware `ble_obd.bin` **e** no app oficial `libobdcore.so`, com disassemblador real via Capstone).
+>
+> O histórico do desenvolvimento está preservado abaixo.
+
 > **Data:** 08 de Novembro de 2026  
 > **Veículo Alvo:** Chevrolet Prisma LTZ 1.4 SPE/4 Flex (2015)  
 > **Hardware:** Dongle OBD2 XTOOL Advancer AD10 (BLE 4.2)  
@@ -69,16 +84,34 @@ Para desvendar a comunicação, o APK oficial `AD10EN_V2.0.3_C203.apk` (60.6 MB)
      0x3b4a: BDF8             ; Retorna da interrupção sem salvar
      ```
      *Isso comprovou matematicamente por que comandos ASCII ("ATZ", "010C") geravam `TX > 0` e `RX = 0` no carro: eram descartados como ruído pelo MCU.*
-   * **Tabela de Comandos do Firmware (`0x08009cb0`):**
-     - `0x6002`: Despachante principal de comandos para o transceptor CAN.
-       - Sub-comando `0x01` (`0x080063c5`): Ativação física dos transceptores CAN (`[ble] systerm enter`). Comuta a alimentação e chaveia os pinos 6 e 14 da porta OBD2.
-       - Sub-comando `0x02` (`0x08006b1d`): Configuração do protocolo OBD2 (`[ble] obd_protocol %d`). Valor `1` = `ISO15765-4 STD 500K` (usado na enum `ObdProtocol` oficial); valor `6` = CAN standard.
-       - Sub-comando `0x03` (`0x08006791`): Configuração de baud rate do CAN controller (`[ble] bps %d` -> 500.000 bps).
-       - Sub-comando `0x80` (`0x08006bd1`): Envio de Frame CAN no barramento físico (`[ble] send_can_id :%d`).
-       - Sub-comando `0x81` (`0x08006ce9`): Leitura ADC direta da tensão da bateria medida internamente pela MCU (`[ble] protocol_volt : %d`).
-       - Sub-comando `0x82` (`0x08006cb1`): Versão de firmware gravada no dongle (`[ble] protocol_version : %s`).
-       - Sub-comando `0x83` (`0x08006c2d`): Número de série do hardware gravado no AD10 (`[ble] protocol_sn : %s`).
-     - `0x6004` (`0x08005d55`): Configuração de filtros de hardware CAN.
+   * **Tabela de Comandos do Firmware (`0x0800bbf4` — REVERIFICADA na v1.2.5):**
+     > ⚠️ A tabela que estava aqui na v1.2.x estava **ERRADA** (endereços e sub-comandos).
+     > A tabela correta está em [`PROTOCOLO_AD10_REVERIFICADO.md`](PROTOCOLO_AD10_REVERIFICADO.md).
+     - `0x6001` → despachante de **configuração CAN** (sub-comandos `0x01`–`0x16`, tabela `0x0800bc3c`):
+       - `0x01` (`0x08006b1d`): `obd_protocol` (1 byte) — `1` = ISO15765-4 STD 500K, `6` = CAN standard.
+       - `0x02` (`0x08006791`): `bps` (4 bytes big-endian — 500.000 = `00 07 A1 20`).
+       - `0x10`/`0x11`/`0x12`: `can_filter_type` / `can_filter_cnt` / IDs de filtro CAN (N×4 bytes BE).
+       - `0x16` (`0x08006bd1`): `send_can_id` (4 bytes BE).
+     - `0x6002` → despachante de **informações OBD do dongle** (sub-comandos `0x80`–`0x86`, tabela `0x0800bcec`):
+       - `0x80` (`0x08006ce9`): `protocol_volt` (2 bytes BE, mV).
+       - `0x81` (`0x08006cb1`): `protocol_version` (string).
+       - `0x82` (`0x08006c2d`): `protocol_sn` (string).
+       - `0x83`/`0x84`/`0x85`: `cur_status` / `cur_bps` / `can_type`.
+     - `0x6009` (`0x080063c5`): **"systerm enter"** — comando de **nível superior** (liga os transceptores CAN).
+     - `0x600A`: notificação espontânea com o frame CAN recebido da ECU (não está na tabela de entrada).
+   * **Byte order do ID de comando (`0x08005c04` + `rev16` em `0x0800766a`):**
+     ```assembly
+     0x08005c06: ldrb  r0, [r6, #1]     ; frame[4]
+     0x08005c08: ldrb  r1, [r6]         ; frame[3]
+     0x08005c0a: lsls  r0, r0, #8
+     0x08005c0c: orrs  r0, r1           ; (frame[4] << 8) | frame[3]
+     0x08005c0e: bl    0x0800766a       ; rev16  ->  (frame[3] << 8) | frame[4]
+     0x08005c14: ldrh  r1, [r7, r1]     ; tabela[i].cmd (0x6001..0x6009)
+     0x08005c16: cmp   r0, r1
+     ```
+     *⇒ o ID do comando é **BIG-ENDIAN** no quadro. Este detalhe era o que impedia o RX de sair de 0.*
+   * **Resposta do dongle (`0x080065dc`):** cabeçalho **`0x55`** (não `0xAB`), escape `0x56`
+     (`0x55 → [0x56, 0x02]`, `0x56 → [0x56, 0x01]`).
    * **Algoritmo de Checksum (`0x5498`):**
      - Loop XOR de todos os bytes de dados (`eors r0, r3`), excluindo o delimitador `0xAA` e o byte final de verificação.
    * **Algoritmo de Byte Stuffing / SLIP (`0x3b64 - 0x3b72`):**
@@ -88,6 +121,11 @@ Para desvendar a comunicação, o APK oficial `AD10EN_V2.0.3_C203.apk` (60.6 MB)
 ---
 
 ## 4. Especificação Técnica do Protocolo
+
+> ⚠️ **Esta seção descreve o formato do frame CAN no barramento (ISO 15765-4), não o protocolo BLE.**
+> O **protocolo BLE** (enquadramento `0xAA`/`0x55`, endianness do comando, tabelas de sub-comandos)
+> está em **[`PROTOCOLO_AD10_REVERIFICADO.md`](PROTOCOLO_AD10_REVERIFICADO.md)** — leia esse arquivo
+> antes de mexer no código BLE.
 
 ### 4.1. Identificadores BLE GATT (Nordic UART Service)
 O dongle utiliza a arquitetura clássica da Nordic Semiconductor (NUS):
@@ -484,7 +522,38 @@ Para facilitar a manutenção contínua e eliminar comandos longos no terminal d
 
 ## 14. Histórico de Versões e Builds
 
+- **v1.2.5 (Build 13/11/2026 22:06) — ⭐ PROTOCOLO BINÁRIO DO AD10 CORRIGIDO:**
+  - **Engenharia reversa refeita com disassemblador real (Capstone)** no firmware do dongle
+    (`ble_obd.bin`, base do flash `0x08002000`) **e** no app oficial (`libobdcore.so`, ARM64),
+    revelando **dois bugs** que vinham impedindo qualquer leitura do carro desde a v1.2.1:
+    1. **ID do comando em little-endian.** O firmware compara `(frame[3]<<8)|frame[4]`
+       (**big-endian**) contra a tabela `0x6001..0x6009`. O app mandava `02 60` → o dongle
+       calculava `0x0260` → **descartava o quadro silenciosamente** → `RX = 0` para sempre.
+    2. **Parser de resposta errado.** O app só aceitava quadros iniciados em `0xAB`/`0xAA`;
+       o dongle responde com **`0x55`** (escape `0x56`).
+  - **Tabelas de sub-comandos reescritas do firmware:** `0x6002` → `0x80`=protocol_volt,
+    `0x81`=protocol_version, `0x82`=protocol_sn, `0x83`=cur_status, `0x84`=cur_bps, `0x85`=can_type;
+    `0x6001` → `0x01`=obd_protocol, `0x02`=bps, `0x0E`/`0x10`/`0x11`/`0x12`=filtros CAN, `0x16`=send_can_id.
+  - **`buildAd10Packet()` corrigido:** cmd big-endian, `L = payload+1`, checksum `seq^L^XOR(cmd+payload)`,
+    byte stuffing `0xAA→[0xAB,0x02]` / `0xAB→[0xAB,0x01]`, contador de sequência.
+  - **Novo parser de quadros `0x55`** com re-assemblagem entre notificações BLE e validação de checksum.
+  - **Handshake corrigido:** sondagem `0x6002` (SN / versão / tensão / can_type — funciona **sem o carro**)
+    + configuração CAN `0x6001` **idêntica à do app oficial** (`CAD10Prot::InitHardware`).
+    O **dongle é quem faz o scanning OBD2**; o app apenas configura e consome o fluxo `0x600A`.
+  - **Notificações `0x600A`:** frames CAN da ECU decodificados com parser ISO-TP tolerante a
+    6 layouts de payload diferentes.
+  - **Diagnóstico melhorado:** log **TX/RX bruto**, contador de quadros OK/inválidos e botão
+    **"🛰️ Reenviar configuração CAN"**.
+  - **UI:** badge encurtado para `v1.2.5 • 13/11` + truncamento com reticências (não estoura mais a tela).
+  - **Testes automatizados:** `tools/reversing/ad10/test_frame.js` (round-trip contra o parser real do
+    firmware) e `tools/reversing/ad10/test_can_decode.js` (6 layouts de payload CAN).
+  - **Documentação:** novo `PROTOCOLO_AD10_REVERIFICADO.md` (fonte da verdade) + ferramentas de RE versionadas.
+  - **APK Gerado:** [`Multcar_Pro_v1.2.apk`](file:///E:/Apps/Multcar/Multcar_Pro_v1.2.apk) e
+    [`Multcar_Pro_v1.0.apk`](file:///E:/Apps/Multcar/Multcar_Pro_v1.0.apk) (4.30 MB) com `versionCode 8`, `versionName 1.2.5`.
+
 - **v1.2.4 (Build 13/11/2026 14:10) — Handshake Completo Nativo XTOOL com `systerm enter` e Protocolo 1 (STD 500K):**
+  > ⚠️ **HISTÓRICO — esta versão NÃO funcionava.** O handshake enviava `0x01`/`0x02`/`0x03` como
+  > sub-comandos do `0x6002` (inexistentes nesse grupo) e o cmd ia em little-endian. Corrigido na v1.2.5.
   - **Identificação Visual Atualizada no Topo:** Badge no cabeçalho atualizado para **`v1.2.4 • 13/11 14:10`** para diferenciação imediata e garantia de que o usuário está com a compilação mais recente.
   - **Injeção do Sub-comando Oficial `0x01` (`systerm enter`):** O handshake nativo agora despacha o sub-comando `0x01` para a função `0x80063c5` do microcontrolador, ativando fisicamente os transceptores CAN dos pinos 6 e 14.
   - **Configuração de Protocolo Dupla:** Configura tanto o valor `1` (`ISO15765-4 STD 500K` na tabela interna de `ObdProtocol` do AD10) quanto o valor `6`, garantindo que o hardware opere em CAN 11b/500k.
@@ -517,15 +586,18 @@ Para facilitar a manutenção contínua e eliminar comandos longos no terminal d
   - Implementação de `WRITE_TYPE_DEFAULT` com fallback e tentativa experimental de subscrição multi-canal.
 
 - **v1.2.1 (Build 10/11/2026 10:45) — Framing Binário Nativo Oficial XTOOL AD10:**
+  > ⚠️ **HISTÓRICO — o framing desta versão estava ERRADO** (cmd em little-endian e resposta em `0xAB`).
+  > A tabela de sub-comandos abaixo também estava errada. Corrigido na **v1.2.5**
+  > (ver [`PROTOCOLO_AD10_REVERIFICADO.md`](PROTOCOLO_AD10_REVERIFICADO.md)).
   - **Descoberta Forense no Firmware do MCU (`ble_obd.bin`) e Driver C++ (`libobdcore.so`):**
     - A desmontagem minuciosa em Assembly ARM Cortex-M Thumb revelou que o microcontrolador do AD10 descarta qualquer byte que não seja precedido pelo delimitador oficial `0xAA` (função `ble_protocol_analy_char` no endereço `0x3af0`).
     - Explicada e resolvida com 100% de exatidão matemática a causa de `TX > 0` e `RX = 0`: comandos ASCII (`"ATZ\r"`, `"010C\r"`) eram descartados pelo hardware.
     - Implementação do construtor oficial `buildAd10Packet(cmdId, payload)`:
-      - Cabeçalho: `0xAA` (App -> AD10) ou `0xAB` (AD10 -> App).
-      - Subsystem: `0x00`.
+      - Cabeçalho: `0xAA` (App -> AD10) — **a resposta do dongle começa com `0x55`, não `0xAB`** (corrigido na v1.2.5).
+      - Byte 1: número de sequência (era `0x00` fixo na v1.2.4).
       - Tamanho `L = (payload_len + 1)`. Tamanho total = `L + 5`.
-      - Comando: 16-bit (`0x6002`).
-      - Sub-comandos: `0x81` (Wakeup/Init), `0x83` (Tensão de Bateria), `0x80` (Frame CAN `send_can_id`).
+      - Comando: 16-bit **BIG-ENDIAN** (`0x6002` → `0x60`, `0x02`) — na v1.2.1 ia em little-endian.
+      - Sub-comandos (tabela **errada** nesta versão): a real é `0x6002` → `0x80`=volt, `0x81`=versão, `0x82`=SN.
       - Checksum XOR nativo: calculado sobre todos os bytes do payload (excluindo 0xAA).
       - Byte Stuffing / SLIP: `0xAA -> [0xAB, 0x02]`, `0xAB -> [0xAB, 0x01]`.
   - **Motor Dual no Polling e na Recepção:**

@@ -35,64 +35,80 @@
 
 ---
 
-## ✅ O que JÁ foi implementado na v1.2.4 (teoricamente corrige isso)
+## ✅ O que a v1.2.5 implementou (corrige os bugs de framing)
 
-- Handshake nativo completo com **`systerm enter`** (sub-comando `0x01` via `0x6002`) — ativa transceptores CAN físicos (pinos 6/14)
-- Configuração protocolo **`1` (ISO15765-4 STD 500K)** + **`6`** (CAN standard)
-- Baud rate **500 kbps** (sub `0x03`)
+- **Quadro de requisição com cmd BIG-ENDIAN** (`cmdHi` antes de `cmdLo`) — o bug nº 1
+- **Parser de resposta `0x55`** com escape `0x56` e re-assemblagem entre blocos BLE — o bug nº 2
+- **Tabelas de sub-comandos reescritas do firmware**: `0x6002` → `0x80`=volt, `0x81`=versão,
+  `0x82`=SN, `0x83`=status, `0x84`=bps, `0x85`=can_type
+- **Handshake**: sondagem `0x6002` (SN/versão/tensão) + configuração CAN `0x6001`
+  idêntica à do app oficial (`obd_protocol`, `bps`, `can_filter_type/cnt`, `filter_frame`)
+- **Notificações `0x600A`** (frames CAN da ECU) com decoder ISO-TP robusto
 - Canal RX **exclusivamente `6E400003`** (único com CCCD `0x2902`) — elimina loop GATT 133
 - Canal TX **exclusivamente `6E400004`** com `write` (com resposta) + fallback
-- Modo **AD10 Nativo** puro: **zero bytes ASCII** no canal (evita corrupção do parser `ble_protocol_analy_char`)
+- Modo **AD10 Nativo** puro: **zero bytes ASCII** no canal
+- **Diagnóstico com log TX/RX bruto** + botão de reenvio da configuração CAN
 
 ---
 
 ## 🔍 Hipóteses para Investigar (próximos passos)
 
-| # | Hipótese | Como Testar |
-|---|----------|-------------|
-| 1 | **Ignicião não está em ON (posição II)** — ECU não alimentada | Confirmar painel aceso todo, não apenas ACC |
-| 2 | **Dongle não recebeu `systerm enter`** (pacote perdeu/fragmentou) | Abrir modal de diagnóstico (toque na barra telemetria) → ver logs BLE recentes |
-| 3 | **Canal RX `0003` não registrou notificação** (Android GATT falhou silenciosamente) | No modal: ver "Canal RX: 6E400003 (Notificações Ativas)" |
-| 4 | **Firmware do AD10 difere do analisado** (sub-comandos diferentes) | Testar modo **ELM327 Universal** (botão ⚡ na barra) — se funcionar, é firmware diferente |
-| 5 | **Outro app segurando a conexão BLE** (XTOOL oficial, Car Scanner em bg) | Forçar parada de todos apps OBD2 antes de testar |
-| 6 | **Bluetooth / Localização (GPS) desativados no Android 10** | Verificar nas configurações do celular/central |
-| 7 | **Versão instalada não é v1.2.4** (cache, build antigo) | Confirmar badge **`v1.2.4 • 13/11 14:10`** no topo do app |
+> As hipóteses 1–7 abaixo já estavam covers pela v1.2.4 e **não eram a causa** — a causa era o framing.
+> Elas continuam valendo **apenas se** o `0x6002` (sondagem) não responder.
+
+| # | Hipótese | Quando investigar | Como Testar |
+|---|----------|------------------|-------------|
+| 1 | Ignição não está em ON (posição II) — ECU não alimentada | Se `0x6002` responder mas o carro não | Confirmar painel aceso todo, não apenas ACC |
+| 2 | Dongle reiniciou o scanner CAN | Se chegar `0x600A` e depois parar | Botão **"🛰️ Reenviar configuração CAN"** no modal |
+| 3 | Canal RX `0003` não registrou notificação | Se não vier NENHUMA notificação | No modal: "Canal RX: 6E400003" |
+| 4 | Valores de período do scanner errados | Se `0x600A` vier sem resposta `0x41` | Ajustar `buildAd10CanConfigEntries()` |
+| 5 | `obd_protocol` errado (`1` vs `6`) | Se `0x600A` vier vazio | Trocar `OBD_PROTOCOL` para `0x06` |
+| 6 | Outro app segurando a conexão BLE | Se conectar e cair | Forçar parada de todos apps OBD2 |
+| 7 | Bluetooth / Localização (GPS) desativados | Se nem achar o dongle | Verificar configurações do celular/central |
+| 8 | Versão instalada não é a v1.2.5 | Sempre | Confirmar badge **`v1.2.5 • 13/11`** |
 
 ---
 
 ## 🎯 Ação Imediata (Próximo Passo no Veículo)
 
-1. **Confirmar badge** `v1.2.4 • 13/11 14:10` no cabeçalho do app
+1. **Confirmar badge** `v1.2.5 • 13/11` no cabeçalho do app
 2. **Fechar TODOS** apps OBD2 (XTOOL, Car Scanner, Torque) — `Configurações > Apps > Forçar parada`
 3. **Ignição na posição II** (painel totalmente aceso, LED do AD10 aceso/fixo)
 4. **Bluetooth + GPS/LOCALIZAÇÃO ligados** no celular/central
 5. Abrir Multcar Pro → tocar **"📡 Conectar"**
-6. **Toque na barra de telemetria** (onde mostra CAN/TX/RX) → abre modal de diagnóstico
+6. **Toque na barra de telemetria** → abre o modal de diagnóstico com o log bruto
 7. **Verificar no modal:**
-   - "Canal RX: 6E400003 (Notificações Ativas)" ✅
-   - "Modo OBD Ativo: ⚡ AD10 Nativo"
-   - Últimos logs BLE (mostram `RX [0003] ...` ou só `TX`?)
-8. **Se RX continuar 0 após ~10s:** tocar botão **"🔄 Alternar para ELM327 Universal"** no modal ou na barra
-9. Reportar aqui: **o que o modal mostra** + **se ELM327 funcionou**
+   - `TX AA 00 03 60 02 01 82 E2` → cmd big-endian ✅
+   - `✔ Quadro AD10 seq=… cmd=0x6002` → **o dongle respondeu** ✅
+   - `AD10 Número de Série: …` → protocolo 100% ✅
+   - `🛰️ Frame CAN ID 0x07E8 …` → frames da ECU chegando
+8. **Se o `0x6002` responder mas o carro não:** ajustar `obd_protocol` / períodos / IDs de filtro
+   (tabela em `PROXIMO_PASSO_OBD2_CAR_SCANNER.md`) e recompilar
+9. **Reportar aqui:** o log bruto completo
 
 ---
 
 ## 📝 Para Próxima IA / Sessão
 
-> **Objetivo:** Fazer o RX sair de 0 e mostradores funcionarem no carro real.
+> **Objetivo:** validar a leitura do carro real com a v1.2.5 (framing corrigido) e fechar o layout
+> do payload `0x600A` / os parâmetros do scanner CAN.
 >
-> **Contexto completo:** `RELATORIO_COMPLETO_PROJETO_MULTCAR.md` + `ESPECIFICACAO_PROTOCOLO_XTOOL_AD10.md` + `PROXIMO_PASSO_OBD2_CAR_SCANNER.md`
+> **Contexto completo:** `PROTOCOLO_AD10_REVERIFICADO.md` (⭐ fonte da verdade) +
+> `PROXIMO_PASSO_OBD2_CAR_SCANNER.md` + `CONTEXTO_AGENTE_IA.md`
 >
-> **Build atual:** `E:\Apps\Multcar\Multcar_Pro_v1.2.apk` (v1.2.4)
+> **Build atual:** `E:\Apps\Multcar\Multcar_Pro_v1.2.apk` (v1.2.5 — versionCode 8)
 >
-> **Não refazer:** engenharia reversa do protocolo (já feita), compilação do APK (já pronta), testes de ELM327 Identifier (já provado que AD10 **não é ELM327**).
+> **Não refazer:** engenharia reversa do protocolo (feita e **reverificada com Capstone**),
+> compilação do APK, e a prova de que o AD10 **não é ELM327** (firmware sem interpretador AT).
 >
-> **Foco agora:** diagnóstico de campo (carro real) → ajustar handshake/timing/pacotes se necessário → validar v1.2.5.
+> **Foco agora:** diagnóstico de campo → validar `0x6002` → validar `0x600A` → ajustar scanner CAN.
 
 ---
 
 ## 🔗 Arquivos-Chave para Debug
 
-- `multcar-app/www/index.html` — lógica BLE completa (funções `initAd10Device`, `processIncomingCanBytes`, `sendCanFrame`, `toggleObdMode`)
-- `multcar-app/src/services/ble/CanProtocol.ts` — parser de respostas
-- `ESPECIFICACAO_PROTOCOLO_XTOOL_AD10.md` — seção 11 (v1.2.4) com frames exatos do handshake `systerm enter`
+- `multcar-app/www/index.html` — lógica BLE completa (`buildAd10Packet`, `processIncomingCanBytes`,
+  `handleAd10Frame`, `handleAd10CanFrame`, `initAd10Device`, `buildAd10CanConfigEntries`, `sendCanFrame`)
+- `PROTOCOLO_AD10_REVERIFICADO.md` — ⭐ especificação binária correta + endereços de memória
+- `tools/reversing/ad10/` — disassembladores (firmware + app oficial) e testes automatizados
+- `multcar-app/src/services/ble/CanProtocol.ts` — parser de respostas (legado, não usado pelo app atual)

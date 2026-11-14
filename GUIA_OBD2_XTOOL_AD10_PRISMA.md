@@ -1,5 +1,9 @@
 # 🚗 Guia Completo: Scanner OBD2 XTOOL Advancer AD10 no Chevrolet Prisma 2015 & Central K2401
 
+> **Nota (13/11/2026):** este guia cobre o **uso e a instalação**. A especificação do
+> **protocolo binário** (enquadramento, endianness do comando, sub-comandos) está em
+> **[`PROTOCOLO_AD10_REVERIFICADO.md`](PROTOCOLO_AD10_REVERIFICADO.md)**.
+
 **Veículo:** Chevrolet Prisma LTZ 1.4 SPE/4 (2015)  
 **Hardware do Scanner:** XTOOL Advancer AD10 (Preto, Bluetooth Low Energy - BLE 4.2)  
 **Central Multimídia:** K2401 (Android 10 Real / Zlink Android Auto)  

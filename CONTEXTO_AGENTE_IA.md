@@ -86,21 +86,37 @@ O dongle opera sobre o perfil **Nordic UART Service (NUS)**:
 
 ## 4. Estrutura do Protocolo Binário Oficial XTOOL AD10
 
-### 4.1. Framing dos Pacotes
+### 4.1. Framing dos Pacotes (REVERIFICADO em 13/11/2026 — v1.2.5)
+
+> ⚠️ **O framing da v1.2.4 estava ERRADO** (little-endian no comando e `0xAB` na resposta).
+> Abaixo está o framing **correto**, validado no firmware `ble_obd.bin` e no app oficial `libobdcore.so`.
+
+**Requisição (App → Dongle):**
 ```
 +------+--------+--------+---------+----------+--------------------+----------+
-| 0xAA | 0x00   | Len L  | Cmd_Low | Cmd_High | Payload de Dados   | Checksum |
+| 0xAA | seq    | Len L  | Cmd_Hi | Cmd_Lo  | Payload de Dados   | Checksum |
 +------+--------+--------+---------+----------+--------------------+----------+
 ```
-- **Byte 0:** `0xAA` (pacote App -> AD10) ou `0xAB` (resposta AD10 -> App).
-- **Byte 1:** `0x00` (Subsystem).
-- **Byte 2:** Tamanho `L = payload_len + 1`. Tamanho total do pacote = `L + 5`.
-- **Bytes 3 e 4:** Comando 16-bit Little-Endian (`0x6002` -> `Cmd_Low = 0x02`, `Cmd_High = 0x60`).
-- **Bytes 5 a N-2:** Payload do subcomando.
-- **Byte N-1 (Checksum):** XOR de todos os bytes de 1 a N-2 (`buffer[1] ^ buffer[2] ^ ... ^ buffer[N-2]`). O delimitador `0xAA` e o próprio byte de checksum são excluídos.
-- **Byte Stuffing / SLIP:**
-  - `0xAA` dentro do payload é substituído por `[0xAB, 0x02]`.
-  - `0xAB` dentro do payload é substituído por `[0xAB, 0x01]`.
+- **Byte 0:** `0xAA` (delimitador de início).
+- **Byte 1:** número de sequência (incrementado a cada envio).
+- **Byte 2:** `L = payload_len + 1`. Tamanho total do quadro = `L + 5`.
+- **Bytes 3 e 4:** Comando 16-bit **BIG-ENDIAN** (`0x6002` → `0x60`, `0x02`).
+  O firmware compara `(frame[3] << 8) | frame[4]` contra a tabela `0x6001..0x6009`.
+- **Bytes 5 a N-2:** Payload do comando.
+- **Byte N-1 (Checksum):** XOR de todos os bytes de 1 a N-2 (`buffer[1] ^ … ^ buffer[N-2]`).
+  Equivalente a `seq ^ L ^ XOR(cmd_hi, cmd_lo, payload…)`.
+- **Byte Stuffing / SLIP:** `0xAA` → `[0xAB, 0x02]`; `0xAB` → `[0xAB, 0x01]`.
+
+**Resposta (Dongle → App):**
+```
++------+--------+--------+---------+----------+--------------------+----------+
+| 0x55 | seq    | Len L  | Cmd_Hi | Cmd_Lo  | Payload de Dados   | Checksum |
++------+--------+--------+---------+----------+--------------------+----------+
+```
+- **Byte 0:** `0x55` (⚠️ **não** é `0xAB`).
+- **Byte Stuffing / SLIP:** `0x55` → `[0x56, 0x02]`; `0x56` → `[0x56, 0x01]`.
+
+Detalhe completo: [`PROTOCOLO_AD10_REVERIFICADO.md`](PROTOCOLO_AD10_REVERIFICADO.md).
 
 ### 4.2. Tabela de Subcomandos (REVERIFICADA em 13/11/2026 — v1.2.5)
 
@@ -128,13 +144,25 @@ Localizada no firmware `ble_obd.bin` na **tabela plana em `0x0800bbf4`** (base d
 | `0x6007` / `0x6008` | `0x08005fad` / `0x08005e5d` | atualização de firmware |
 | `0x6009` | `0x080063c5` | "systerm enter" |
 
-### 4.3. Sequência Completa de Inicialização de Fábrica (`initAd10Device`)
-Na versão **v1.2.4**, o app envia sequencialmente ao conectar:
-1. `Sub 0x81`: Solicita tensão de bateria (`AA 00 03 02 60 01 81 E1`).
-2. `Sub 0x82`: Solicita versão de firmware (`AA 00 03 02 60 01 82 E2`).
-3. `Sub 0x02`: Configura Protocolo 1 (STD 500K) e Protocolo 6.
-4. `Sub 0x03`: Configura taxa CAN para 500 kbps (`AA 00 08 02 60 01 03 00 07 A1 20 CHK`).
-5. `Sub 0x01`: Dispara `systerm enter` para energizar o transceptor CAN (`AA 00 03 02 60 01 01 E3`).
+### 4.3. Sequência de Inicialização (`initAd10Device`) — v1.2.5
+
+Na versão **v1.2.5**, ao conectar, o app envia:
+
+1. **Sondagem `0x6002`** (payload `[n, sub…]`) — funciona **sem o carro**, valida o framing de ponta a ponta:
+   - `0x82` → número de série
+   - `0x81` → versão do firmware
+   - `0x80` → tensão do dongle
+   - `0x85` → tipo de CAN
+2. **Configuração CAN `0x6001`** (payload `[n, (sub, dados)…]`) — sequência idêntica à do app oficial
+   (`CAD10Prot::InitHardware`, `libobdcore.so` @ `0x15d20`):
+   `obd_protocol(1)` · `bps(500000)` · `filter_frame_len(0)` · `can_filter_type(2)` ·
+   `can_filter_cnt(2)` · `filter_frame([07E0][07E8])` · `frame_2_frame(0)` ·
+   `over_2_start(2)` · `request_bye_2_bye(200)` · `keep_line(80)` · `keep_line_frame_len(0)`
+
+> **O próprio dongle faz o scanning OBD2** (o firmware tem o módulo `obd_scan`), então o app
+> **não** envia requisições OBD2: apenas configura e consome o fluxo de frames `0x600A`.
+>
+> A cada ~2 s o app reenvia a configuração CAN (o dongle pode reiniciar o scanner sozinho).
 
 ---
 
@@ -144,16 +172,19 @@ Na versão **v1.2.4**, o app envia sequencialmente ao conectar:
 E:\Apps\Multcar/
 ├── multcar-app/                          # Projeto Capacitor Android Nativo
 │   ├── android/                          # Projeto Android Gradle
-│   │   ├── app/build.gradle              # versionCode 7, versionName "1.2.4"
+│   │   ├── app/build.gradle              # versionCode 8, versionName "1.2.5"
 │   │   └── gradlew.bat                   # Script de build Gradle
 │   └── www/                              # Código-fonte Web encapsulado no APK
 │       └── index.html                    # CÓDIGO-FONTE PRINCIPAL (Interface + Lógica BLE)
 ├── index.html                            # Espelho idêntico para PWA standalone
 ├── preview-dashboard.html                # Espelho idêntico para preview local
-├── Multcar_Pro_v1.2.apk                  # APK compilado v1.2.4 para distribuição
-├── Multcar_Pro_v1.0.apk                  # Espelho v1.2.4 para compatibilidade de links
+├── Multcar_Pro_v1.2.apk                  # APK compilado v1.2.5 para distribuição
+├── Multcar_Pro_v1.0.apk                  # Espelho v1.2.5 para compatibilidade de links
+├── PROTOCOLO_AD10_REVERIFICADO.md        # ⭐ FONTE DA VERDADE do protocolo binário (v1.2.5)
+├── tools/reversing/ad10/                 # ⭐ Disassembladores + testes automatizados do protocolo
 ├── RELATORIO_COMPLETO_PROJETO_MULTCAR.md # Histórico completo de todo o desenvolvimento
-├── ESPECIFICACAO_PROTOCOLO_XTOOL_AD10.md # Engenharia reversa aprofundada do protocolo
+├── ESPECIFICACAO_PROTOCOLO_XTOOL_AD10.md # Engenharia reversa (HISTÓRICO — ver banner no topo)
+├── PROBLEMA_ATUAL_RX_ZERO.md             # Diagnóstico do RX=0 (causa raiz encontrada)
 ├── PROXIMO_PASSO_OBD2_CAR_SCANNER.md     # Roteiro de testes de campo no veículo
 ├── CONTEXTO_AGENTE_IA.md                 # ESTE DOCUMENTO (Guia Mestre de Handoff)
 └── README.md                             # Apresentação do repositório
@@ -161,39 +192,48 @@ E:\Apps\Multcar/
 
 ---
 
-## 6. Estado Atual da Versão (v1.2.4 • Build 13/11 14:10)
+## 6. Estado Atual da Versão (v1.2.5 • Build 13/11 — Protocolo AD10 Corrigido)
 
-- **Badge Visual:** `<span class="badge version-badge" id="appVersionBadge">v1.2.4 • 13/11 14:10</span>`.
-  - Permite ao usuário bater o olho na tela e confirmar imediatamente que está rodando a versão certa.
+- **Badge Visual:** `<span class="badge version-badge" id="appVersionBadge">v1.2.5 • 13/11</span>`
+  (texto curto para não estourar a tela da K2401 1024×600; descrição completa no `title`).
+- **Protocolo:** quadro de requisição `0xAA` com **cmd big-endian**; resposta `0x55` com escape `0x56`.
+- **Sub-comandos:** `AD10_CFG` (grupo `0x6001`) e `AD10_OBD` (grupo `0x6002`) — tabelas reescritas a partir do firmware.
+- **Parser de resposta:** re-assembla quadros entre notificações BLE e valida o checksum.
+- **Notificações `0x600A`:** frames CAN da ECU → decoder ISO-TP robusto (6 layouts testados).
 - **Seletor Dual-Mode em 1 Toque:**
-  - Existe um botão interativo na interface: `[⚡ AD10 Nativo]` / `[⚡ ELM327 Universal]`.
-  - O app inicia por padrão em **`⚡ AD10 Nativo`** (frames binários `0xAA`).
-  - Se o usuário tocar no botão, comuta instantaneamente para ELM327 clássico (comandos AT ASCII).
-- **Diagnóstico Touch:**
-  - Um toque em cima da **Barra de Telemetria** abre um modal com todos os dados de baixo nível: estado do link BLE, endereço MAC, status do GATT, pacotes TX, pacotes RX, modo ativo e timestamp de compilação.
-- **Status do Build:**
-  - Compilado via `gradlew assembleDebug` sem erros (`BUILD SUCCESSFUL in 51s`).
-  - Copiado para `Multcar_Pro_v1.2.apk` e `Multcar_Pro_v1.0.apk`.
-  - Sincronizado no GitHub (`git push origin main`).
+  - Botão `[⚡ AD10 Nativo]` / `[⚡ ELM327 Universal]`.
+  - Padrão: **`⚡ AD10 Nativo`** (frames binários `0xAA`).
+  - O modo ELM327 serve para dongles ELM327 reais — **o AD10 não tem interpretador AT** (confirmado no firmware).
+- **Diagnóstico Touch:** um toque na **Barra de Telemetria** abre o modal com log **TX/RX bruto**,
+  contador de quadros OK/inválidos e o botão **"🛰️ Reenviar configuração CAN"**.
+- **Testes automatizados:**
+  - `node tools/reversing/ad10/test_frame.js` — round-trip do quadro contra o parser real do firmware.
+  - `node tools/reversing/ad10/test_can_decode.js` — decoder de frames CAN em 6 layouts de payload.
+- **Status do Build:** `gradlew assembleDebug` → `BUILD SUCCESSFUL`; copiado para `Multcar_Pro_v1.2.apk`
+  e `Multcar_Pro_v1.0.apk`; sincronizado no GitHub.
 
 ---
 
 ## 7. Onde Paramos e O Que Esperar no Próximo Teste
 
 ### Onde Estamos Exatamente:
-O usuário baixou o APK v1.2.4 e irá conectá-lo ao **Chevrolet Prisma 1.4 LTZ 2015** com o dongle **XTOOL AD10**.
+A v1.2.5 foi **compilada, instalada e testada no celular** (instalação OK, badge ajustado).
+**Falta o teste de campo no veículo** — ainda não foi feito.
 
-### O Que Deve Ser Verificado no Teste:
-1. **Badge de Versão:** Confirmar se o badge no topo exibe **`v1.2.4 • 13/11 14:10`**.
-2. **Conexão BLE:** Tocar em **"📡 Conectar"**. O dongle deve conectar e **ficar conectado de forma estável** (o bug do "conecta e cai" foi sanado na v1.2.3 ao isolar as notificações exclusivamente no canal `0003`).
-3. **Comportamento do RX:**
-   - Observar o contador **RX** na barra de telemetria.
-   - Na inicialização com `systerm enter`, o dongle deve ativar os transceptores CAN e responder à leitura de voltagem (`sub 0x81`) e aos PIDs (`sub 0x80`).
-   - Se o contador `RX` começar a subir (`RX > 0`), significa que os dados chegaram da ECU e os mostradores (RPM, Velocidade, Temperatura) se moverão em tempo real.
-4. **Se RX ainda persistir em 0 no teste de campo:**
-   - Instruir o usuário a dar um toque na **Barra de Telemetria** para conferir o modal de diagnóstico.
-   - Testar o botão alternador **`[⚡ ELM327 Universal]`** para descartar qualquer variante de firmware.
-   - Investigar se os bytes de CAN ID em `send_can_id` precisam de inversão endian (`0x07DF` vs `0xDF07`) ou se o polling precisa de delay entre PIDs maior que 150ms.
+### O Que Deve Ser Verificado no Teste (no carro):
+1. **Badge de Versão:** confirmar **`v1.2.5 • 13/11`**.
+2. **Conexão BLE:** tocar em **"📡 Conectar"**. O link deve ficar estável (notificações só no canal `0003`).
+3. **Sondagem `0x6002` (não precisa do carro):** o log deve mostrar
+   `✔ Quadro AD10 seq=… cmd=0x6002 …` e `AD10 Número de Série: …`.
+   → Se isso aparecer, **o framing está 100% correto** e o resto é só a parte CAN.
+4. **Resposta do carro:** o dongle deve emitir notificações `0x600A` com os frames da ECU
+   (`🛰️ Frame CAN ID 0x07E8 …` e `📊 Resposta OBD2: modo=41 PID=0x0C …`).
+5. **Se o RX continuar em 0 no veículo:**
+   - Abrir o **Diagnóstico BLE** e copiar o **log bruto**.
+   - Ajustar os **valores de período** do scanner (`frame_2_frame`, `over_2_start`,
+     `request_bye_2_bye`, `keep_line` — hoje `0/2/200/80`) e/ou o `obd_protocol`
+     (hoje `1`; alternativa `6` = CAN standard).
+   - Confirmar o **layout do payload `0x600A`** (o decoder já é tolerante a 6 layouts).
 
 ---
 
