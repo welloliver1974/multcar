@@ -18,11 +18,32 @@
 >
 > **Comandos de análise que funcionam:**
 > ```powershell
+> # 0) SEMPRE antes de começar: valida base do flash, alinhamento e tabelas
+> python tools\reversing\ad10\fw_selfcheck.py
 > # disassemblar o firmware do dongle (base flash 0x08002000)
-> python scratch\fw_dis.py 0x08005af0 0x08005c50 "ble_protocol_analy_char"
+> python tools\reversing\ad10\fw_dis.py 0x08005af0 0x08005c50 "ble_protocol_analy_char"
 > # disassemblar o app oficial (ARM64)
-> python scratch\so_dis.py 0x18040 300
+> python tools\reversing\ad10\so_dis.py 0x18040 300
 > ```
+>
+> ### 📌 Regra de ouro deste projeto (aprendida na v1.2.5)
+>
+> **Nunca confie em disassembly que não veio de um disassemblador real, e nunca aceite uma
+> conclusão de engenharia reversa sem validação cruzada.**
+>
+> A RE que precedeu a v1.2.4 usou um **decoder de Thumb caseado à mão** e o resultado foi
+> interpretado por um modelo de linguagem. O decoder estava **desalinhado**, então cada linha
+> de assembly era lixo — mas soava convincente, e virou uma cascata de conclusões erradas
+> (cmd little-endian, resposta `0xAB`, sub-comandos inexistentes). O sintoma (TX sobe, RX = 0)
+> era **idêntico** em 10 causas diferentes, então nada indicava o caminho.
+>
+> Como esse erro já custou 4 versões do app, o checklist obrigatório agora é:
+> 1. `fw_selfcheck.py` passa (base, alinhamento, tabelas) — **antes de analyze qualquer coisa**
+> 2. Usar **Capstone**, nunca decoder caseado
+> 3. A mesma conclusão tem que bater no **firmware do dongle** *e* no **app oficial**
+> 4. Escrever um **teste de round-trip** (`test_frame.js`) contra o parser real do firmware
+>
+> Post-mortem completo: `PROTOCOLO_AD10_REVERIFICADO.md` §5.
 
 > **Atenção para qualquer IA que assumir esta conversa:**  
 > Este documento é o resumo técnico definitivo, sem rodeios, de **tudo o que foi feito**, **as causas raízes descobertas**, **as armadilhas já superadas**, o **estado atual do código** e **onde paramos exatamente**.  

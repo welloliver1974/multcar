@@ -195,7 +195,61 @@ Ou seja: **o app configura e o dongle transmite as requisições OBD e devolve o
 
 ---
 
-## 5. Referências de código (para auditoria futura)
+## 5. 📌 Post-mortem: por que a engenharia reversa anterior errou
+
+> **Lição de processo — leia antes de qualquer nova RE neste projeto.**
+
+A análise que precedeu a v1.2.5 foi feita com um **decodificador de Thumb caseado à mão**
+(`scratch/thumb_decoder.js`, `scratch/disasm_*.js`), e o resultado foi interpretado por um modelo
+de linguagem. Isso produziu **conclusões plausíveis e verificadamente erradas**.
+
+### Sintoma: o decoder desalinhado produzia lixo
+
+Rodando Capstone no **mesmo endereço** que o decoder antigo usava (`0x08003af0` no arquivo):
+
+```
+decoder antigo (desalinhado):        Capstone (correto):
+0x08003af0: str  r2, [r0]            0x08003af0: push {r3, r4, r5, r6, r7, lr}
+0x08003af2: ldr  r2, [r0]            0x08003af2: ldr  r5, [pc, #0x150]
+0x08003af4: lsls r2, r2, #0x1e       0x08003af4: movs r6, #0xff
+```
+
+Cada linha inventada virou uma conclusão errada, mas **soava convincente**:
+
+| Conclusão errada | Realidade |
+|---|---|
+| ID do comando em **little-endian** | é **big-endian** (`rev16` em `0x0800766a`) |
+| Resposta começa com `0xAB` | começa com **`0x55`** (escape `0x56`) |
+| `systerm enter` = sub-comando `0x01` do `0x6002` | é o comando de nível superior **`0x6009`** |
+| `0x81`=volt, `0x82`=versão | `0x80`=volt, `0x81`=versão, `0x82`=SN |
+| Tabela de comandos em `0x08009c38` | está em **`0x0800bbf4`** (desalinhamento de 2 KB = base errada) |
+
+### A regra de ouro
+
+> **Nunca confie em disassembly que não veio de um disassemblador real.**
+> E **nunca aceite uma conclusão de engenharia reversa sem validação cruzada.**
+
+Na prática, nesta projeto:
+
+1. **Use Capstone** (`pip install capstone`) — `tools/reversing/ad10/fw_dis.py` / `so_dis.py`.
+2. **Rode o self-check antes de começar** — `python tools/reversing/ad10/fw_selfcheck.py`
+   (valida base do flash, alinhamento, tabela de comandos e strings em ~2 s).
+3. **Valide nos DOIS lados:** o mesmo protocolo tem que aparecer no firmware do dongle
+   **e** no app oficial (`libobdcore.so`). Só o que bate nos dois é verdade.
+4. **Escreva um teste de round-trip** (`test_frame.js`): o quadro gerado pelo app precisa passar
+   pelo parser reimplementado a partir do firmware real.
+5. **Se uma conclusão é subtly errada, o app não funciona de jeito nenhum** — e o sintoma
+   (TX subindo, RX zerado) é idêntico em 10 causas diferentes. Por isso o log bruto no app.
+
+### Como isso foi detectado
+
+O `fw_selfcheck.py` acima existe porque **o self-check falha de forma óbvia** quando a base ou o
+decoder estão errados — em vez de gerar conclusões silenciosamente erradas. Foi ele que
+expôs o desalinhamento de 2 KB na primeira rodada da v1.2.5.
+
+---
+
+## 6. Referências de código (para auditoria futura)
 
 | Item | Endereço |
 |---|---|
@@ -213,7 +267,7 @@ Ou seja: **o app configura e o dongle transmite as requisições OBD e devolve o
 
 ---
 
-## 6. O que ainda precisa ser confirmado no carro
+## 7. O que ainda precisa ser confirmado no carro (teste de campo pendente)
 
 1. **Layout exato do payload `0x600A`** (frame CAN). O app faz uma varredura heurística:
    procura o CAN ID `0x07E0`/`0x07E8`/`0x07DF` e, depois, o byte de modo OBD `0x41`.

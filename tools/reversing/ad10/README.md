@@ -18,10 +18,26 @@ Binários necessários (já extraídos do APK oficial `AD10EN_V2.0.3_C203.apk`):
 | App oficial (ARM64) | `unpacked_apk/lib/arm64-v8a/libobdcore.so` |
 | Dalvik do app | `unpacked_apk/classes.dex` |
 
+## ⚠️ Comece SEMPRE pelo self-check
+
+```powershell
+python tools\reversing\ad10\fw_selfcheck.py
+```
+
+Ele valida em ~2 segundos a **base do flash**, o **alinhamento do disassemblador**, a **tabela de
+comandos** e as **strings-chave** do firmware. Se algo falhar, a análise está errada — pare.
+
+> **Por que isso existe:** a engenharia reversa da v1.2.4 usou um decoder de Thumb caseado à mão
+> que estava desalinhado. Cada linha de assembly era lixo, mas o resultado foi interpretado como
+> se fosse válido — gerando 4 versões do app com o protocolo errado (cmd little-endian, resposta
+> `0xAB`, sub-comandos inexistentes). O sintoma era idêntico ao de 10 causas diferentes.
+> Detalhes: `PROTOCOLO_AD10_REVERIFICADO.md` §5.
+
 ## Ferramentas
 
 | Script | O que faz |
 |---|---|
+| `fw_selfcheck.py` | ⭐ **Valida o ambiente antes da RE** (base, alinhamento, tabelas, strings) |
 | `fw_dis.py <início> <fim> [rótulo]` | Disassembla o firmware do dongle (ARM Thumb). Ex.: `python fw_dis.py 0x08005af0 0x08005c50 "ble_protocol_analy_char"` |
 | `fw_dis2.py <início> <fim> [rótulo]` | Igual ao anterior, mas resolve literais → strings do firmware |
 | `fw_strings.js <arquivo> [mín]` | Extrai todas as strings ASCII de um binário com offset |
