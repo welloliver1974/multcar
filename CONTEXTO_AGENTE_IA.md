@@ -1,5 +1,29 @@
 # 🤖 Contexto Mestre do Projeto Multcar Pro para Agentes de IA
 
+> ## 🚨 CORREÇÃO CRÍTICA (13/11/2026, v1.2.5) — LEIA ANTES DE TUDO
+>
+> A engenharia reversa feita até a v1.2.4 **tinha dois erros que nunca permitiriam ler o carro**:
+>
+> 1. **O ID do comando era enviado em LITTLE-ENDIAN.** O firmware do dongle compara
+>    `(frame[3] << 8) | frame[4]` (BIG-ENDIAN) contra a tabela `0x6001..0x6009`.
+>    A v1.2.4 mandava `02 60` e o dongle calculava `0x0260` → **nenhum handler era acionado** → RX = 0.
+> 2. **O parser de resposta do app esperava `0xAB`/`0xAA`.** O dongle responde com
+>    cabeçalho **`0x55`** e escapa com **`0x56`**. Mesmo com o TX corrigido, nada era decodificado.
+>
+> Além disso, o **mapa de sub-comandos estava errado** (`0x81` não é voltagem, `0x82` não é versão,
+> e `0x01/0x02/0x03` não existem no grupo `0x6002`).
+>
+> ✅ **Fonte da verdade:** [`PROTOCOLO_AD10_REVERIFICADO.md`](PROTOCOLO_AD10_REVERIFICADO.md)
+> (verificado no firmware `ble_obd.bin` **e** no app oficial `libobdcore.so`, com disassemblador real via Capstone).
+>
+> **Comandos de análise que funcionam:**
+> ```powershell
+> # disassemblar o firmware do dongle (base flash 0x08002000)
+> python scratch\fw_dis.py 0x08005af0 0x08005c50 "ble_protocol_analy_char"
+> # disassemblar o app oficial (ARM64)
+> python scratch\so_dis.py 0x18040 300
+> ```
+
 > **Atenção para qualquer IA que assumir esta conversa:**  
 > Este documento é o resumo técnico definitivo, sem rodeios, de **tudo o que foi feito**, **as causas raízes descobertas**, **as armadilhas já superadas**, o **estado atual do código** e **onde paramos exatamente**.  
 > Leia atentamente antes de sugerir ou alterar qualquer linha de código!
@@ -78,18 +102,31 @@ O dongle opera sobre o perfil **Nordic UART Service (NUS)**:
   - `0xAA` dentro do payload é substituído por `[0xAB, 0x02]`.
   - `0xAB` dentro do payload é substituído por `[0xAB, 0x01]`.
 
-### 4.2. Tabela de Subcomandos do Despachante `0x6002` (Microcontrolador)
-Localizada no firmware `ble_obd.bin` no endereço Flash `0x08009c38`:
+### 4.2. Tabela de Subcomandos (REVERIFICADA em 13/11/2026 — v1.2.5)
 
-| Subcomando | Nome da Função no MCU | Ação Executada pelo Hardware |
-| :---: | :---: | :--- |
-| **`0x01`** | `systerm enter` (`0x80063c5`) | **Chaveamento e alimentação dos transceptores CAN físicos nos pinos 6 e 14.** Sem este comando, o hardware CAN do dongle fica dormindo! |
-| **`0x02`** | `obd_protocol` (`0x8006b1d`) | Seleção do protocolo OBD2: valor `1` = `ISO15765-4 STD 500K` (usado na enum Java `com.xtool.common.ObdProtocol`); valor `6` = CAN Standard. |
-| **`0x03`** | `bps` (`0x8006791`) | Baud rate CAN: `[0x00, 0x07, 0xA1, 0x20]` (500.000 bps). |
-| **`0x80`** | `send_can_id` (`0x8006bd1`) | Transmissão de frame CAN de 11-bit no barramento (`0x07DF` com padding). |
-| **`0x81`** | `protocol_volt` (`0x8006ce9`) | Conversão ADC direta para medir a voltagem da bateria do carro. |
-| **`0x82`** | `protocol_version` (`0x8006cb1`) | Retorna a versão de firmware do AD10. |
-| **`0x83`** | `protocol_sn` (`0x8006c2d`) | Retorna o número de série gravado no chip. |
+> ⚠️ **A tabela abaixo da v1.2.4 estava ERRADA.** A tabela real está em
+> `PROTOCOLO_AD10_REVERIFICADO.md`. Resumo corrigido:
+>
+> - **Comando `0x6002`** (payload `[n, sub…]`): `0x80`=protocol_volt, `0x81`=protocol_version,
+>   `0x82`=protocol_sn, `0x83`=cur_status, `0x84`=cur_bps, `0x85`=can_type.
+>   **Não existem** `0x01/0x02/0x03` neste grupo.
+> - **Comando `0x6001`** (payload `[n, (sub, dados)…]`): `0x01`=obd_protocol(1 byte),
+>   `0x02`=bps(4 bytes BE), `0x0E`=filter_frame_len(1), `0x10`=can_filter_type(1),
+>   `0x11`=can_filter_cnt(1), `0x12`=filter IDs (N×4 bytes BE), `0x04`/`0x05`/`0x06`=períodos(2 bytes BE),
+>   `0x07`=keep_line(1), `0x16`=send_can_id(4 bytes BE).
+> - **Comando `0x6009`**: "systerm enter" (liga os transceptores CAN dos pinos 6/14) — é um
+>   comando de **nível superior**, não um sub-comando do `0x6002`.
+> - **Comando `0x600A`**: notificação espontânea do dongle com o frame CAN da ECU.
+
+Localizada no firmware `ble_obd.bin` na **tabela plana em `0x0800bbf4`** (base do flash = `0x08002000`):
+
+| Cmd | Handler | Sub-tabela |
+|---|---|---|
+| `0x6001` | `0x080064ad` | `0x0800bc3c` → sub `0x01`–`0x16` |
+| `0x6002` | `0x080064ad` | `0x0800bcec` → sub `0x80`–`0x86` |
+| `0x6003` | `0x08005d55` | `0x0800bd24` → sub `0x01`–`0x05` |
+| `0x6007` / `0x6008` | `0x08005fad` / `0x08005e5d` | atualização de firmware |
+| `0x6009` | `0x080063c5` | "systerm enter" |
 
 ### 4.3. Sequência Completa de Inicialização de Fábrica (`initAd10Device`)
 Na versão **v1.2.4**, o app envia sequencialmente ao conectar:
@@ -191,3 +228,4 @@ git push origin main
 
 ---
 *Documento compilado e validado em 13/nov/2026 às 15:15.*
+

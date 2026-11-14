@@ -32,3 +32,6 @@ dump_*.js
 *_disasm.txt
 disasm_range_out.txt
 
+
+# temporarios gerados pelo teste de round-trip
+tools/reversing/ad10/_ad10_mod.js

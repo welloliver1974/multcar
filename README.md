@@ -46,10 +46,10 @@ Outros comandos úteis:
 
 ## 📱 Como Utilizar no Celular ou Multimídia
 
-1. **Via APK Android Nativo (v1.2.4 — Build 13/11 14:10):**
+1. **Via APK Android Nativo (v1.2.5 — Build 13/11):**
    * Baixe o instalador mais recente: [`Multcar_Pro_v1.2.apk`](file:///E:/Apps/Multcar/Multcar_Pro_v1.2.apk) (ou [`Multcar_Pro_v1.0.apk`](file:///E:/Apps/Multcar/Multcar_Pro_v1.0.apk)).
    * Instale na central multimídia K2401 ou no celular Android.
-   * Suporte nativo ao modo **`⚡ AD10 Nativo`** com ativação de transceptores CAN (`systerm enter`), além do modo **`⚡ ELM327 Universal`** selecionável com 1 toque.
+   * Suporte nativo ao modo **`⚡ AD10 Nativo`** (protocolo binário oficial `0xAA`, comando big-endian, resposta `0x55`), além do modo **`⚡ ELM327 Universal`** selecionável com 1 toque.
 2. **Via PWA (Navegador Chrome):**
    * Acesse `https://seu-dominio-multcar.com` pelo Chrome no Android.
    * Toque no botão **"📲 Instalar"** para adicionar o app à tela inicial.
@@ -59,8 +59,10 @@ Outros comandos úteis:
 ## 📚 Documentação Técnica Detalhada
 
 * 🤖 [Guia Mestre de Contexto para Agentes de IA](CONTEXTO_AGENTE_IA.md) — *Leitura obrigatória para qualquer IA entender todo o histórico e onde paramos*
+* 🛰️ **[Protocolo AD10 Reverificado](PROTOCOLO_AD10_REVERIFICADO.md)** — ⭐ *Especificação binária corrigida, validada no firmware do dongle e no app oficial*
 * 📘 [Relatório Completo do Projeto](RELATORIO_COMPLETO_PROJETO_MULTCAR.md)
 * 🛰️ [Handoff e Próximos Passos](PROXIMO_PASSO_OBD2_CAR_SCANNER.md)
 * 📖 [Guia de Deploy na VPS](GUIA_DEPLOY_VPS.md)
-* 🔬 [Especificação do Protocolo Binário CAN AD10](ESPECIFICACAO_PROTOCOLO_XTOOL_AD10.md)
+* 🔬 [Especificação do Protocolo Binário CAN AD10 (histórico)](ESPECIFICACAO_PROTOCOLO_XTOOL_AD10.md)
+* 🧰 [Ferramentas de Engenharia Reversa AD10](tools/reversing/ad10/README.md)
 

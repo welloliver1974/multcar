@@ -807,7 +807,7 @@
     <div class="brand">
       <h1>🏎️ MULTCAR</h1>
       <span class="badge">Prisma 1.4</span>
-      <span class="badge version-badge" id="appVersionBadge" title="Multcar Pro v1.2.4">v1.2.4 • 13/11 14:10</span>
+      <span class="badge version-badge" id="appVersionBadge" title="Multcar Pro v1.2.5">v1.2.5 • 13/11 Protocolo AD10 Corrigido</span>
     </div>
     <div class="header-actions">
       <div class="status-badge">
@@ -1866,37 +1866,104 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
     let txCount = 0;
     let rxCount = 0;
 
+    // ======================================================================
+    // PROTOCOLO OFICIAL XTOOL AD10 — REVERIFICADO (13/11/2026)
+    //
+    // Quadro de REQUISIÇÃO (App -> AD10), confirmado no firmware do dongle
+    // (unpacked_apk/assets/ble_obd.bin, ble_protocol_analy_char @ 0x08005af0)
+    // e no app oficial (libobdcore.so, set_cmd @ 0x1a4c4 / build @ 0x18040):
+    //
+    //   [0] 0xAA      Delimitador de início
+    //   [1] seq      Sequência (incrementada a cada envio)
+    //   [2] L        Tamanho do payload + 1   (total do quadro = L + 5)
+    //   [3] cmdHi    ID do comando (16 bits) em BIG-ENDIAN  <<<<<<<<
+    //   [4] cmdLo
+    //   [5..] payload
+    //   [N] checksum XOR de todos os bytes de [1] até [N-1]
+    //
+    // Byte stuffing (SLIP): 0xAA -> [0xAB, 0x02] ; 0xAB -> [0xAB, 0x01]
+    //
+    // Quadro de RESPOSTA (AD10 -> App): cabeçalho 0x55 e escape 0x56
+    //   0x55 -> [0x56, 0x02] ; 0x56 -> [0x56, 0x01]
+    // ======================================================================
+    const AD10 = {
+      CMD_CONFIG: 0x6001,   // configuração CAN/baud/protocolo  (payload: [n, (sub, dados)…])
+      CMD_OBD:    0x6002,   // informações OBD do dongle         (payload: [n, sub…])
+      CMD_PROTO:  0x6003,   // reset/clear/can_scan do protocolo
+      CMD_ENTER:  0x6009,   // "systerm enter" (liga transceptores CAN)
+      CMD_CAN_RX: 0x600A    // notificação espontânea: frame CAN recebida da ECU
+    };
+
+    // Sub-comandos do comando 0x6001 (configuração CAN) — tabela 0x0800bc38 do firmware
+    const AD10_CFG = {
+      OBD_PROTOCOL: 0x01,      // 1 byte  : 1 = ISO15765-4 STD 500K, 6 = CAN standard
+      BPS:          0x02,      // 4 bytes BE (32 bits)
+      BYE_2_BYE:    0x03,
+      FRAME_2_FRAME:0x04,      // 1 byte
+      OVER_2_START: 0x05,      // 1 byte
+      REQ_BYE_2_BYE:0x06,      // 1 byte
+      KEEP_LINE:    0x07,      // 1 byte
+      KEEP_LINE_LEN:0x08,
+      KEEP_LINE_FRM:0x09,
+      KEEP_LINE_CNT:0x0A,
+      KEEP_LINE_LEN2:0x0B,     // 1 byte
+      BPS_ADDR:     0x0C,
+      FILTER_OFFSET:0x0D,
+      FILTER_LEN:   0x0E,      // 1 byte
+      FILTER_FRAME: 0x0F,      // 1 byte de tamanho + N bytes
+      FILTER_TYPE:  0x10,      // 1 byte
+      FILTER_CNT:   0x11,      // 1 byte
+      FILTER_ID:    0x12,      // 2 bytes BE (CAN ID)
+      AFC_CTRL:     0x13,
+      AFC_LEN:      0x14,
+      AFC_FRAME:    0x15,
+      SEND_CAN_ID:  0x16       // 4 bytes BE (CAN ID)
+    };
+
+    // Sub-comandos do comando 0x6002 (informações OBD) — tabela 0x0800bcec do firmware
+    const AD10_OBD = {
+      VOLT:    0x80,   // protocol_volt   -> 2 bytes BE (mV)
+      VERSION: 0x81,   // protocol_version-> string
+      SN:      0x82,   // protocol_sn     -> string
+      STATUS:  0x83,   // cur_status
+      BPS:     0x84,   // cur_bps
+      CAN_TYPE:0x85    // can_type
+    };
+
+    let ad10TxSeq = 0;
+
     /**
-     * Construtor Oficial de Pacotes Binários XTOOL AD10 (Descoberto por Engenharia Reversa em libobdcore.so e ble_obd.bin)
-     * Formato:
-     * - Byte 0: 0xAA (Início do Frame App -> AD10)
-     * - Byte 1: 0x00 (Canal / Subsystem)
-     * - Byte 2: L = (vetor.length - 1)
-     * - Byte 3: CmdId_Low (cmdId & 0xFF)
-     * - Byte 4: CmdId_High ((cmdId >> 8) & 0xFF)
-     * - Bytes 5..: Payload
-     * - Último Byte: Checksum XOR de todos os bytes de 1 a N-2 (excluindo 0xAA)
-     * - Byte Stuffing (SLIP): 0xAA -> [0xAB, 0x02], 0xAB -> [0xAB, 0x01] (exceto o 0xAA inicial)
+     * Construtor de pacotes do XTOOL AD10 (App -> Dongle)
      */
     function buildAd10Packet(cmdId, payload = []) {
-      const vec = [(cmdId & 0xFF), ((cmdId >> 8) & 0xFF), ...payload];
-      const L = (vec.length - 1) & 0xFF;
-      const unescaped = [0xAA, 0x00, L, ...vec];
+      const seq = ad10TxSeq++ & 0xFF;
+      const L = (payload.length + 1) & 0xFF;   // firmware: total do quadro = L + 5
+      const raw = [0xAA, seq, L, (cmdId >> 8) & 0xFF, (cmdId & 0xFF), ...payload];
 
       let chk = 0;
-      for (let i = 1; i < unescaped.length; i++) {
-        chk ^= unescaped[i];
-      }
-      unescaped.push(chk & 0xFF);
+      for (let i = 1; i < raw.length; i++) chk ^= raw[i];
+      raw.push(chk & 0xFF);
 
       const escaped = [0xAA];
-      for (let i = 1; i < unescaped.length; i++) {
-        const b = unescaped[i];
+      for (let i = 1; i < raw.length; i++) {
+        const b = raw[i];
         if (b === 0xAA) escaped.push(0xAB, 0x02);
         else if (b === 0xAB) escaped.push(0xAB, 0x01);
         else escaped.push(b);
       }
       return new Uint8Array(escaped);
+    }
+
+    /**
+     * Monta o payload do comando 0x6001: [nº de entradas, (sub-comando, dados)…]
+     */
+    function buildAd10ConfigPayload(entries) {
+      const p = [entries.length & 0xFF];
+      for (const [sub, data] of entries) {
+        p.push(sub & 0xFF);
+        for (const b of data) p.push(b & 0xFF);
+      }
+      return p;
     }
 
     /**
@@ -2005,9 +2072,23 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
 
     let rxStringAccumulator = '';
 
+    // ------------------------------------------------------------------
+    // Parser de RESPOSTAS do AD10 (Dongle -> App)
+    // Quadro: [0] 0x55 | [1] seq | [2] L | [3] cmdHi | [4] cmdLo | payload… | chk
+    // Escaping de saída do dongle: 0x55 -> [0x56,0x02] ; 0x56 -> [0x56,0x01]
+    // ------------------------------------------------------------------
+    let ad10RxState = 0;    // 0 = aguardando 0x55 | 1 = coletando | 2 = escapado
+    let ad10RxFrame = [];   // quadro já des-escapado
+    let ad10RxFramesOk = 0;
+    let ad10RxFramesBad = 0;
+
+    function hexDump(arr) {
+      return Array.from(arr).map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ');
+    }
+
     /**
-     * Processa bytes brutos recebidos do AD10 no canal RX (6E400003)
-     * Suporta formato Binário CAN AD10, Resposta de Tensão 0x83 e ASCII ELM327 com buffer acumulador
+     * Processa bytes brutos recebidos do AD10 no canal RX (6E400003).
+     * Reassimba quadros 0x55 (o dongle pode enviar em vários blocos BLE).
      */
     function processIncomingCanBytes(data, sourceChar = '') {
       if (!data || data.length === 0) return;
@@ -2019,152 +2100,171 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
 
       const hexArr = Array.from(data).map(b => b.toString(16).padStart(2, '0').toUpperCase());
       const prefix = sourceChar ? `[${sourceChar.slice(-4)}] ` : '';
-      if (lastHexEl) lastHexEl.textContent = prefix + hexArr.slice(0, 6).join(' ');
+      if (lastHexEl) lastHexEl.textContent = prefix + hexArr.slice(0, 8).join(' ');
       logBle(`RX ${prefix}${hexArr.join(' ')}`);
 
-      // Atualiza status se estava configurando
+      for (const b of data) {
+        if (ad10RxState === 0) {
+          if (b === 0x55) { ad10RxState = 1; ad10RxFrame = [0x55]; }
+          continue;
+        }
+        if (ad10RxState === 2) {
+          if (b === 0x02) ad10RxFrame.push(0x55);
+          else if (b === 0x01) ad10RxFrame.push(0x56);
+          else ad10RxFrame.push(b);
+          ad10RxState = 1;
+        } else {
+          if (b === 0x56) { ad10RxState = 2; continue; }
+          ad10RxFrame.push(b);
+        }
+        if (ad10RxFrame.length >= 3) {
+          const total = ad10RxFrame[2] + 5;   // total do quadro = L + 5
+          if (ad10RxFrame.length >= total) {
+            handleAd10Frame(ad10RxFrame.slice(0, total));
+            ad10RxFrame = [];
+            ad10RxState = 0;
+          }
+        }
+      }
+    }
+
+    /**
+     * Valida e despacha um quadro 0x55 recebido do dongle.
+     */
+    function handleAd10Frame(frame) {
+      if (frame.length < 6) { ad10RxFramesBad++; return; }
+
+      // Checksum: XOR dos bytes [1..N-2] comparado com o último byte
+      let chk = 0;
+      for (let i = 1; i < frame.length - 1; i++) chk ^= frame[i];
+      if ((chk & 0xFF) !== frame[frame.length - 1]) {
+        ad10RxFramesBad++;
+        logBle(`⚠️ RX checksum inválido: calc ${(chk & 0xFF).toString(16)} / recv ${frame[frame.length - 1].toString(16)}`);
+        return;
+      }
+      ad10RxFramesOk++;
+
+      const seq = frame[1];
+      const cmd = ((frame[3] << 8) | frame[4]) & 0xFFFF;
+      const payload = frame.slice(5, frame.length - 1);
+
+      logBle(`✔ Quadro AD10 seq=${seq} cmd=0x${cmd.toString(16).toUpperCase()} payload=[${hexDump(payload)}]`);
+
       const statusEl = document.getElementById('telemetryCanStatus');
       if (statusEl && statusEl.textContent !== 'Ativo') {
         statusEl.textContent = 'Ativo';
         statusEl.style.color = 'var(--green)';
       }
 
-      // 0. Resposta Oficial XTOOL AD10 com Framing 0xAB ou 0xAA
-      if ((data[0] === 0xAB || data[0] === 0xAA) && data.length >= 5) {
-        // Desfaz o byte stuffing (SLIP): [0xAB, 0x02] -> 0xAA, [0xAB, 0x01] -> 0xAB
-        const unescaped = [data[0]];
-        for (let i = 1; i < data.length; i++) {
-          if (data[i] === 0xAB && i + 1 < data.length) {
-            if (data[i + 1] === 0x02) { unescaped.push(0xAA); i++; }
-            else if (data[i + 1] === 0x01) { unescaped.push(0xAB); i++; }
-            else { unescaped.push(data[i]); }
-          } else {
-            unescaped.push(data[i]);
-          }
-        }
+      switch (cmd) {
+        case AD10.CMD_OBD:    handleAd10ObdReply(payload); break;
+        case AD10.CMD_CONFIG: handleAd10ConfigReply(payload); break;
+        case AD10.CMD_CAN_RX: handleAd10CanFrame(payload); break;
+        default:
+          logBle(`ℹ️ Quadro não tratado cmd=0x${cmd.toString(16).toUpperCase()}`);
+      }
+    }
 
-        // Tensão de Bateria retornada pelo AD10 (Sub-comando 0x81 ou 0x83)
-        for (let i = 2; i < unescaped.length - 2; i++) {
-          if (unescaped[i] === 0x81 || unescaped[i] === 0x83) {
-            const vRaw = (unescaped[i + 1] << 8) | unescaped[i + 2];
-            if (vRaw > 500 && vRaw < 2500) {
-              setVoltage(vRaw / 100);
+    /**
+     * Resposta de um comando 0x6002 (informações OBD do dongle).
+     * Payload: [nº de resultados, (sub …, dados)…]
+     */
+    function handleAd10ObdReply(payload) {
+      if (!payload.length) return;
+      const n = payload[0];
+      let idx = 1;
+      for (let i = 0; i < n && idx < payload.length; i++) {
+        const sub = payload[idx++];
+        switch (sub) {
+          case AD10_OBD.VOLT: {
+            if (idx + 1 < payload.length) {
+              const mv = (payload[idx] << 8) | payload[idx + 1];
+              idx += 2;
+              if (mv > 500 && mv < 5000) setVoltage(mv / 1000);
+              logBle(`⚡ Tensão do dongle: ${(mv / 1000).toFixed(2)} V`);
             }
-          }
-        }
-
-        // Busca dados OBD2 (0x41) dentro do payload CAN desembalado do AD10
-        for (let i = 2; i < unescaped.length - 2; i++) {
-          if (unescaped[i] === 0x41) {
-            const pid = unescaped[i + 1];
-            const a = unescaped[i + 2] ?? 0;
-            const b = unescaped[i + 3] ?? 0;
-            handleObdPidResponse(pid, a, b);
             break;
           }
+          case AD10_OBD.VERSION:
+          case AD10_OBD.SN: {
+            const rest = payload.slice(idx);
+            const txt = new TextDecoder('ascii').decode(new Uint8Array(rest)).replace(/\0+$/g, '').trim();
+            idx = payload.length;
+            logBle(`ℹ️ AD10 ${sub === AD10_OBD.SN ? 'Número de Série' : 'Versão'}: ${txt}`);
+            if (sub === AD10_OBD.VERSION) {
+              const el = document.getElementById('aiDataFw');
+              if (el) el.textContent = txt || '--';
+            }
+            break;
+          }
+          case AD10_OBD.STATUS:
+          case AD10_OBD.BPS:
+          case AD10_OBD.CAN_TYPE: {
+            const v = payload[idx++] ?? 0;
+            logBle(`ℹ️ AD10 status=${sub} valor=${v}`);
+            if (sub === AD10_OBD.BPS) {
+              const el = document.getElementById('aiDataBps');
+              if (el) el.textContent = v + ' bps';
+            }
+            break;
+          }
+          default:
+            logBle(`ℹ️ 0x6002 sub=0x${sub.toString(16).toUpperCase()} dados=[${hexDump(payload.slice(idx))}]`);
+            idx = payload.length;
         }
       }
+    }
 
-      // 1. Resposta de Tensão Direta da MCU AD10 (Comando 0x81 ou 0x83)
-      if ((data[0] === 0x81 || data[0] === 0x83) && data.length >= 3) {
-        const vRaw = (data[1] << 8) | data[2];
-        if (vRaw > 500 && vRaw < 2000) {
-          setVoltage(vRaw / 100);
+    function handleAd10ConfigReply(payload) {
+      logBle(`ℹ️ 0x6001 resposta: [${hexDump(payload)}]`);
+    }
+
+    /**
+     * Notificação 0x600A: frame CAN recebida da ECU.
+     * O layout exato varia; por isso procuramos o ID CAN (0x7E0/0x7E8) e/ou
+     * o byte de modo OBD (0x41) dentro do payload.
+     */
+    function handleAd10CanFrame(payload) {
+      if (!payload.length) return;
+
+      // 1) Tenta localizar o ID CAN (11 bits, big-endian) e os dados depois dele
+      let dataStart = -1;
+      for (let i = 0; i + 1 < payload.length; i++) {
+        const id = ((payload[i] << 8) | payload[i + 1]) & 0xFFFF;
+        if (id === 0x07E0 || id === 0x07E8 || id === 0x07DF) {
+          dataStart = i + 2;
+          logBle(`🛰️ Frame CAN ID 0x${id.toString(16).toUpperCase()} dados=[${hexDump(payload.slice(dataStart))}]`);
+          break;
         }
       }
+      if (dataStart < 0) dataStart = 1;   // fallback: pula o byte de tamanho
 
-      // 2. Resposta Binária Direta CAN (Busca pelo byte 0x41 de Mode 01)
-      for (let i = 0; i < data.length - 2; i++) {
-        if (data[i] === 0x41) {
+      // 2) Procura respostas OBD2 Modo 01 (0x41) / Modo 03 (0x43) / Modo 04 (0x44)
+      const data = payload.slice(dataStart);
+      for (let i = 0; i < data.length - 1; i++) {
+        const mode = data[i];
+        if (mode === 0x41) {
           const pid = data[i + 1];
           const a = data[i + 2] ?? 0;
           const b = data[i + 3] ?? 0;
           handleObdPidResponse(pid, a, b);
           break;
         }
-
-        // Resposta Mode 03 (Códigos de Falha DTCs: 0x43)
-        if (data[i] === 0x43) {
-          const rawCodes = data.slice(i + 1);
-          renderDtcResults(rawCodes);
+        if (mode === 0x43) {
+          renderDtcResults(new Uint8Array(data.slice(i + 1)));
           break;
         }
-
-        // Resposta Mode 04 (Falhas Apagadas: 0x44)
-        if (data[i] === 0x44) {
-          document.getElementById('dtcList').innerHTML = `
-            <div class="dtc-row clean">
-              <div class="dtc-code" style="color: var(--green);">FALHAS APAGADAS (MODE 04)</div>
-              <div class="dtc-desc">Comando executado com sucesso na ECU GM. Luz de injeção apagada.</div>
-            </div>
-          `;
-          showToast('✅ Limpeza Concluída', 'Códigos de falha e luz de injeção apagados com sucesso!', 'success', 5000);
+        if (mode === 0x44) {
+          const dtcCleanEl = document.getElementById('dtcList');
+          if (dtcCleanEl) {
+            dtcCleanEl.innerHTML = `
+              <div class="dtc-row clean">
+                <div class="dtc-code" style="color: var(--green);">FALHAS APAGADAS (MODE 04)</div>
+                <div class="dtc-desc">Comando executado com sucesso na ECU GM. Luz de injeção apagada.</div>
+              </div>`;
+          }
           break;
         }
-      }
-
-      // 3. Resposta ASCII / Texto com Acumulador de Linhas (Universal ELM327 / AD10)
-      try {
-        const chunkStr = new TextDecoder('ascii').decode(data);
-        rxStringAccumulator += chunkStr;
-        if (rxStringAccumulator.length > 2048) {
-          rxStringAccumulator = rxStringAccumulator.slice(-512);
-        }
-
-        // Divide por quebras de linha ou prompt '>'
-        const lines = rxStringAccumulator.split(/[\r\n>]+/);
-        // Mantém a última parte não terminada no acumulador
-        rxStringAccumulator = lines.pop() || '';
-
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed) continue;
-
-          // ATRV ou resposta de voltagem (ex: "12.6V")
-          if (trimmed.includes('V') && !isNaN(parseFloat(trimmed))) {
-            const v = parseFloat(trimmed);
-            if (v >= 9 && v <= 18) setVoltage(v);
-            continue;
-          }
-
-          // Resposta Mode 01 em texto (ex: "41 0C 1A F8" ou "7E8 04 41 0C 1A F8" ou "410C1AF8")
-          const clean = trimmed.replace(/[\s:]/g, '').toUpperCase();
-          const idx41 = clean.indexOf('41');
-          if (idx41 !== -1 && clean.length >= idx41 + 6) {
-            const pid = parseInt(clean.substr(idx41 + 2, 2), 16);
-            const a = parseInt(clean.substr(idx41 + 4, 2), 16);
-            const b = clean.length >= idx41 + 8 ? parseInt(clean.substr(idx41 + 6, 2), 16) : 0;
-            if (!isNaN(pid) && !isNaN(a)) {
-              handleObdPidResponse(pid, a, b);
-            }
-          }
-
-          // Resposta Mode 03 (DTCs em texto)
-          const idx43 = clean.indexOf('43');
-          if (idx43 !== -1 && clean.length >= idx43 + 4) {
-            const hexCodes = clean.substr(idx43 + 2);
-            const rawBytes = [];
-            for (let k = 0; k < hexCodes.length - 1; k += 2) {
-              rawBytes.push(parseInt(hexCodes.substr(k, 2), 16));
-            }
-            if (rawBytes.length > 0) renderDtcResults(new Uint8Array(rawBytes));
-          }
-
-          // Resposta Mode 04 (Falhas Apagadas)
-          if (clean.includes('44') || clean.includes('OK')) {
-            const dtcCleanEl = document.getElementById('dtcList');
-            if (dtcCleanEl && clean.includes('44')) {
-              dtcCleanEl.innerHTML = `
-                <div class="dtc-row clean">
-                  <div class="dtc-code" style="color: var(--green);">FALHAS APAGADAS (MODE 04)</div>
-                  <div class="dtc-desc">Comando executado com sucesso na ECU GM. Luz de injeção apagada.</div>
-                </div>
-              `;
-            }
-          }
-        }
-      } catch (e) {
-        console.warn('[ASCII Parse Warning]', e);
       }
     }
 
@@ -2261,6 +2361,7 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
         txCount++;
         const txCountEl = document.getElementById('telemetryTxCount');
         if (txCountEl) txCountEl.textContent = txCount;
+        logBle(`TX ${hexDump(frameBytes)}`);
 
         if (isNativeBle && currentDeviceId && window.capacitorCommunityBluetoothLe) {
           const BleClient = window.capacitorCommunityBluetoothLe.BleClient;
@@ -2308,12 +2409,52 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
     }
 
     /**
-     * Handshake Nativo Oficial XTOOL AD10 (Extraído do firmware ble_obd.bin e libobdcore.so):
-     * 1. Consulta de voltagem da bateria da MCU (sub 0x81)
-     * 2. Consulta de versão do firmware (sub 0x82)
-     * 3. Configuração do protocolo OBD: ISO 15765-4 CAN (sub 0x02 = obd_protocol, valor 6)
-     * 4. Configuração do baud rate: 500k bps (sub 0x03 = bps, valor 500000)
-     * NÃO envia comandos ASCII para não corromper o parser binário da MCU!
+     * Envia um comando 0x6002 (informações OBD do dongle).
+     * Payload: [nº de sub-comandos, sub-comando…]
+     */
+    async function sendAd10ObdCommand(subs) {
+      const payload = [subs.length & 0xFF, ...subs];
+      await sendCanFrame(buildAd10Packet(AD10.CMD_OBD, payload));
+    }
+
+    /**
+     * Envia um quadro 0x6001 (configuração CAN) com a lista de entradas.
+     * Cada entrada = [sub-comando, dados…]
+     */
+    async function sendAd10ConfigCommand(entries) {
+      await sendCanFrame(buildAd10Packet(AD10.CMD_CONFIG, buildAd10ConfigPayload(entries)));
+    }
+
+    /**
+     * Sequência de configuração CAN idêntica à do app oficial XTOOL
+     * (CAD10Prot::InitHardware em libobdcore.so).
+     */
+    function buildAd10CanConfigEntries() {
+      return [
+        [AD10_CFG.OBD_PROTOCOL,  [0x01]],                    // 1 = ISO15765-4 STD 500K
+        [AD10_CFG.BPS,           [0x00, 0x07, 0xA1, 0x20]],   // 500.000 bps
+        [AD10_CFG.FILTER_LEN,    [0x00]],                     // filter_frame_len
+        [AD10_CFG.FILTER_TYPE,   [0x02]],                     // can_filter_type
+        [AD10_CFG.FILTER_CNT,    [0x02]],                     // can_filter_cnt (2 IDs)
+        [AD10_CFG.FILTER_ID,     [0x00, 0x00, 0x07, 0xE0,     // CAN ID 0x07E0 (GM 5-byte header)
+                                 0x00, 0x00, 0x07, 0xE8]],    // CAN ID 0x07E8 (ISO-TP)
+        [AD10_CFG.FRAME_2_FRAME, [0x00, 0x00]],               // frame_2_frame
+        [AD10_CFG.OVER_2_START,  [0x00, 0x02]],               // over_2_start
+        [AD10_CFG.REQ_BYE_2_BYE, [0x00, 0xC8]],               // request_bye_2_bye (200 ms)
+        [AD10_CFG.KEEP_LINE,     [0x50]],                     // keep_line (80 ms)
+        [AD10_CFG.KEEP_LINE_LEN2,[0x00, 0x00]]                // keep_line_frame_len
+      ];
+    }
+
+    /**
+     * Handshake Nativo XTOOL AD10
+     *
+     * Protocolo binário oficial (0xAA …) — confirmado por engenharia reversa
+     * do firmware do dongle (ble_obd.bin) e do app oficial (libobdcore.so).
+     *
+     * Nada de ASCII aqui: o firmware do AD10 NÃO possui interpretador AT
+     * (todo byte recebido passa por ble_protocol_analy_char, que só aceita
+     * quadros iniciados em 0xAA).
      */
     async function initAd10Device() {
       const statusEl = document.getElementById('telemetryCanStatus');
@@ -2322,40 +2463,30 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
         statusEl.style.color = 'var(--yellow)';
       }
 
-      logBle('Iniciando handshake AD10 Nativo (Binário)...');
+      logBle('Iniciando handshake AD10 (protocolo binário oficial 0xAA)...');
+      ad10RxState = 0;
+      ad10RxFrame = [];
 
       try {
-        // 1. Consulta de Tensão da Bateria (Sub-comando 0x81 no hardware AD10)
-        const voltPacket = buildAd10Packet(0x6002, [0x01, 0x81]);
-        await sendCanFrame(voltPacket);
-        await new Promise(r => setTimeout(r, 60));
+        // 1) Identificação do dongle (0x6002) — valida o framing de ponta a ponta
+        await sendAd10ObdCommand([AD10_OBD.SN]);
+        await new Promise(r => setTimeout(r, 150));
+        await sendAd10ObdCommand([AD10_OBD.VERSION]);
+        await new Promise(r => setTimeout(r, 150));
+        await sendAd10ObdCommand([AD10_OBD.VOLT]);
+        await new Promise(r => setTimeout(r, 150));
+        await sendAd10ObdCommand([AD10_OBD.CAN_TYPE]);
+        await new Promise(r => setTimeout(r, 150));
 
-        // 2. Consulta de Versão do Firmware (Sub-comando 0x82)
-        const verPacket = buildAd10Packet(0x6002, [0x01, 0x82]);
-        await sendCanFrame(verPacket);
-        await new Promise(r => setTimeout(r, 60));
-
-        // 3. Configura Protocolo OBD: CAN 11-bit 500k (Sub-comando 0x02 = obd_protocol: 1 e 6 para ISO 15765-4)
-        await sendCanFrame(buildAd10Packet(0x6002, [0x01, 0x02, 0x01]));
-        await new Promise(r => setTimeout(r, 50));
-        await sendCanFrame(buildAd10Packet(0x6002, [0x01, 0x02, 0x06]));
-        await new Promise(r => setTimeout(r, 50));
-
-        // 4. Configura Baud Rate: 500000 bps (Sub-comando 0x03 = bps, 4 bytes big endian: 0x00, 0x07, 0xA1, 0x20)
-        const bpsPacket = buildAd10Packet(0x6002, [0x01, 0x03, 0x00, 0x07, 0xA1, 0x20]);
-        await sendCanFrame(bpsPacket);
-        await new Promise(r => setTimeout(r, 60));
-
-        // 5. Ativação do Barramento CAN (Sub-comando 0x01 = systerm enter)
-        const enterPacket = buildAd10Packet(0x6002, [0x01, 0x01]);
-        await sendCanFrame(enterPacket);
-        await new Promise(r => setTimeout(r, 60));
+        // 2) Configuração do barramento CAN (0x6001) — igual ao app oficial
+        await sendAd10ConfigCommand(buildAd10CanConfigEntries());
+        await new Promise(r => setTimeout(r, 250));
 
         if (statusEl) {
           statusEl.textContent = 'AD10 500k';
           statusEl.style.color = 'var(--green)';
         }
-        logBle('Handshake AD10 Nativo concluído com sucesso.');
+        logBle('Handshake AD10 concluído. Aguardando frames CAN da ECU (0x600A)...');
       } catch (e) {
         logBle(`Erro no handshake AD10: ${e.message || e}`);
       }
@@ -2402,8 +2533,10 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
 
     /**
      * Loop de Amostragem Estável:
-     * Envia comandos de acordo com o modo ativo (AD10 Nativo ou ELM327 Universal).
-     * Não reseta a conexão periodicamente, garantindo estabilidade total.
+     * - Modo AD10 Nativo: mantém a configuração CAN do dongle e monitora as
+     *   notificações 0x600A (frames CAN da ECU). O próprio dongle faz o
+     *   scanning OBD2 — o app só configura e consome o fluxo.
+     * - Modo ELM327 Universal: comandos AT ASCII (para dongles ELM327 reais).
      */
     function startPolling() {
       if (isPolling) return;
@@ -2417,55 +2550,48 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
         if (!isConnectedBle) return;
 
         let warningShown = false;
+        let tick = 0;
 
         async function pollStep() {
           if (!isPolling || !isConnectedBle) return;
 
-          // Sugestão amigável se após 30 comandos o dongle não respondeu no modo atual
-          if (rxCount === 0 && txCount >= 30 && !warningShown) {
+          // Sugestão amigável se o dongle não responder nada
+          if (rxCount === 0 && txCount >= 20 && !warningShown) {
             warningShown = true;
-            logBle(`Sem resposta em modo ${currentObdMode}. Sugerindo alternar modo.`);
+            logBle(`Sem resposta do dongle em modo ${currentObdMode}.`);
             showToast(
               '💡 Dica de Comunicação',
               `O dongle ainda não respondeu no modo <strong>${currentObdMode}</strong>.<br>` +
-              `Toque no botão <strong>⚡ Alternar Modo</strong> na barra superior para testar <strong>${currentObdMode === 'AD10' ? 'ELM327 Universal' : 'AD10 Nativo'}</strong>!`,
+              `Abra o <strong>Diagnóstico BLE</strong> (toque na barra de telemetria) e veja o log bruto.<br>` +
+              `Confirme que a <strong>ignição está na posição II</strong> e que o LED do AD10 está aceso.`,
               'warning',
               8000
             );
           }
 
-          const item = POLL_QUEUE[pollIndex];
-          pollIndex = (pollIndex + 1) % POLL_QUEUE.length;
-
-          if (item) {
-            try {
-              if (currentObdMode === 'AD10') {
-                // Modo Nativo XTOOL AD10: pacote binário framing 0xAA -> 0x6002
-                if (item.cmd === 'ATRV\r') {
-                  // Leitura de tensão direta no hardware AD10 (sub 0x81)
-                  await sendCanFrame(buildAd10Packet(0x6002, [0x01, 0x81]));
-                } else {
-                  const can12 = [
-                    0x01, 0x80,                      // Sub-comando 0x80 (send_can_id)
-                    0xDF, 0x07, 0x00, 0x00,          // CAN ID 0x07DF (broadcast universal OBD2)
-                    0x02, item.mode, item.pid,       // Single Frame (len=2, mode, pid)
-                    0x55, 0x55, 0x55, 0x55, 0x55     // Padding padrão GM Delphi
-                  ];
-                  await sendCanFrame(buildAd10Packet(0x6002, can12));
-                }
-              } else {
-                // Modo Universal ELM327: comando ASCII limpo com \r
-                if (item.cmd) {
-                  await sendCanFrame(enc.encode(item.cmd));
-                }
+          try {
+            if (currentObdMode === 'AD10') {
+              tick++;
+              // Reenvia a configuração CAN periodicamente (o dongle pode reiniciar
+              // o scanner sozinho) e consulta o estado do protocolo.
+              if (tick % 4 === 0) {
+                await sendAd10ConfigCommand(buildAd10CanConfigEntries());
+              } else if (tick % 4 === 2) {
+                await sendAd10ObdCommand([AD10_OBD.STATUS]);
               }
-            } catch (ePoll) {
-              logBle(`Erro no poll: ${ePoll.message || ePoll}`);
+            } else {
+              // Modo Universal ELM327: comandos ASCII limpos
+              const item = POLL_QUEUE[pollIndex];
+              pollIndex = (pollIndex + 1) % POLL_QUEUE.length;
+              if (item && item.cmd) {
+                await sendCanFrame(enc.encode(item.cmd));
+              }
             }
+          } catch (ePoll) {
+            logBle(`Erro no poll: ${ePoll.message || ePoll}`);
           }
 
-          // Intervalo adaptativo: 160ms com fluxo de dados ativo; 350ms aguardando resposta
-          const delay = (rxCount > 0) ? 160 : 350;
+          const delay = (rxCount > 0) ? 500 : 800;
           pollingInterval = setTimeout(pollStep, delay);
         }
 
@@ -2525,22 +2651,39 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
     function showBleDiagnosticInfo() {
       const dev = currentDeviceId || (bleDevice ? bleDevice.name : 'Nenhum');
       const can = document.getElementById('telemetryCanStatus')?.textContent || '--';
-      const recentLogs = bleLogs.slice(-6).join('<br>');
+      const recentLogs = bleLogs.slice(-10).join('<br>');
       const msg = `
-        <strong>Versão do App:</strong> v1.2.4 (Build 13/11/2026 14:10) [GATT Estável & Systerm Enter]<br>
-        <strong>Modo OBD Ativo:</strong> ${currentObdMode === 'AD10' ? '⚡ AD10 Nativo (0x6002 Binário)' : '🔌 ELM327 Universal (Comandos AT ASCII)'}<br>
+        <strong>Versão do App:</strong> v1.2.5 (Build 13/11/2026 — Protocolo AD10 Corrigido)<br>
+        <strong>Modo OBD Ativo:</strong> ${currentObdMode === 'AD10' ? '⚡ AD10 Nativo (binário 0xAA, cmd BIG-ENDIAN)' : '🔌 ELM327 Universal (AT ASCII)'}<br>
         <strong>Dispositivo:</strong> ${dev}<br>
         <strong>CAN Status:</strong> ${can}<br>
-        <strong>Canal RX:</strong> 6E400003 (Notificações Ativas)<br>
-        <strong>Canal TX:</strong> 6E400004 (${lastWriteInfo})<br>
+        <strong>Canal RX:</strong> 6E400003 (notificações) &nbsp;|&nbsp; <strong>Canal TX:</strong> 6E400004 (${lastWriteInfo})<br>
         <strong>Pacotes TX:</strong> ${txCount} | <strong>Pacotes RX:</strong> ${rxCount}<br>
-        <strong>Último Hex:</strong> ${document.getElementById('telemetryLastHex')?.textContent || '--'}<br><br>
+        <strong>Quadros OK:</strong> ${ad10RxFramesOk} | <strong>Quadros inválidos:</strong> ${ad10RxFramesBad}<br>
+        <strong>Último Hex RX:</strong> ${document.getElementById('telemetryLastHex')?.textContent || '--'}<br><br>
         <button class="btn btn-secondary" onclick="toggleObdMode();" style="width: 100%; margin-bottom: 8px;">
           🔄 Alternar para ${currentObdMode === 'AD10' ? 'ELM327 Universal' : 'AD10 Nativo'}
+        </button>
+        <button class="btn btn-secondary" onclick="sendAd10Probe();" style="width: 100%; margin-bottom: 8px;">
+          🛰️ Reenviar configuração CAN
         </button><br>
         <strong>Histórico Recente BLE:</strong><br><small style="font-family: monospace;">${recentLogs || 'Nenhum evento registrado'}</small>
       `;
-      showToast('📊 Diagnóstico BLE', msg, 'info', 12000);
+      showToast('📊 Diagnóstico BLE', msg, 'info', 15000);
+    }
+
+    /**
+     * Reenvia manualmente a sequência de configuração CAN do dongle.
+     */
+    async function sendAd10Probe() {
+      if (!isConnectedBle) {
+        showToast('⚠️ Sem conexão', 'Conecte ao AD10 antes de enviar comandos.', 'warning', 3000);
+        return;
+      }
+      logBle('→ Reenviando configuração CAN (0x6001)…');
+      await sendAd10ConfigCommand(buildAd10CanConfigEntries());
+      await new Promise(r => setTimeout(r, 200));
+      await sendAd10ObdCommand([AD10_OBD.SN]);
     }
 
     /**

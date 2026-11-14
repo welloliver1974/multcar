@@ -1,5 +1,20 @@
 # 🛰️ Especificação do Protocolo Bluetooth Low Energy (BLE) — XTOOL Advancer AD10
 
+> ## 🚨 AVISO — DOCUMENTO PARCIALMENTE SUPERADO (13/11/2026, v1.2.5)
+>
+> As seções 8 a 11 deste documento foram escritas com um **decodificador manual de Thumb caseado**
+> e contêm **erros críticos** que impediam o app de funcionar:
+>
+> - ❌ O ID do comando **NÃO** é little-endian: é **BIG-ENDIAN** (`frame[3]`=MSB, `frame[4]`=LSB).
+> - ❌ A **resposta** do dongle **não** começa com `0xAB`: começa com **`0x55`** (escape `0x56`).
+> - ❌ O mapa de sub-comandos do `0x6002` está errado (`0x80`=volt, `0x81`=versão, `0x82`=SN).
+> - ❌ `systerm enter` é o comando de nível superior **`0x6009`**, não um sub-comando do `0x6002`.
+>
+> ✅ **Use [`PROTOCOLO_AD10_REVERIFICADO.md`](PROTOCOLO_AD10_REVERIFICADO.md)** — refaz a especificação
+> com disassemblador real (Capstone), validada no firmware `ble_obd.bin` **e** no app oficial `libobdcore.so`.
+>
+> Este documento é mantido apenas como histórico.
+
 > **Status:** Engenharia reversa aprofundada concluída com sucesso a partir de `classes.dex` e biblioteca nativa C++ `libobdcore.so`.  
 > **Data:** 09/nov/2026  
 > **Finalidade:** Base de desenvolvimento do aplicativo proprietário **Multcar** para celular e central multimídia K2401 (Chevrolet Prisma LTZ 2015).
