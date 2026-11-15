@@ -815,7 +815,7 @@
     <div class="brand">
       <h1>🏎️ MULTCAR</h1>
       <span class="badge">Prisma 1.4</span>
-      <span class="badge version-badge" id="appVersionBadge" title="Multcar Pro v1.2.8 — Frame CAN cru no payload (igual ao app oficial) + varredura de cmds">v1.2.8 • 15/11</span>
+      <span class="badge version-badge" id="appVersionBadge" title="Multcar Pro v1.2.9 — Varredura segura (sem 0x6009) + frame CAN cru no payload">v1.2.9 • 15/11</span>
     </div>
     <div class="header-actions">
       <div class="status-badge">
@@ -2533,7 +2533,13 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
      *
      * Como o cmd exato ainda não foi confirmado, o app varre as combinações.
      */
-    const AD10_OBD_CMDS = [0x6001, 0x6104, 0x6105, 0x6106, 0x6002, 0x6003, 0x6009];
+    /**
+     * ⚠️ `0x6009` NÃO entra na varredura automática: o handler do firmware
+     * repassa o payload cru para o callback do módulo `obd_scan`, e payloads
+     * malformados derrubam/reiniciam o dongle (o BLE desconecta e reconecta
+     * sozinho). Ele só é enviado pelo botão manual "Enviar 0x6009".
+     */
+    const AD10_OBD_CMDS = [0x6001, 0x6104, 0x6002, 0x6003];
 
     function buildAd10CanPayloads(canId, mode, pid) {
       const hi = (canId >> 8) & 0xFF, lo = canId & 0xFF;
@@ -2823,7 +2829,7 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
             logBle(`Erro no poll: ${ePoll.message || ePoll}`);
           }
 
-          const delay = (rxCount > 0) ? 250 : 500;
+          const delay = (rxCount > 0) ? 600 : 900;
           pollingInterval = setTimeout(pollStep, delay);
         }
 
