@@ -815,7 +815,7 @@
     <div class="brand">
       <h1>🏎️ MULTCAR</h1>
       <span class="badge">Prisma 1.4</span>
-      <span class="badge version-badge" id="appVersionBadge" title="Multcar Pro v1.2.6 — Protocolo AD10 + Requisição OBD2 (filter_frame + send_can_id)">v1.2.6 • 14/11</span>
+      <span class="badge version-badge" id="appVersionBadge" title="Multcar Pro v1.2.7 — Varredura automática do gatilho do scanner CAN">v1.2.7 • 15/11</span>
     </div>
     <div class="header-actions">
       <div class="status-badge">
@@ -2521,6 +2521,62 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
     }
 
     /**
+     * VARREDURA AUTOMÁTICA (v1.2.7)
+     *
+     * O protocolo BLE já está 100% provado (TX→RX, checksum, big-endian, ACK 0x600B).
+     * O que falta é o GATILHO do scanner CAN no dongle. Como o payload exato do
+     * comando `0x6009` ("enter system") ainda não foi confirmado, o app executa
+     * uma varredura automática de todas as combinações plausíveis logo após
+     * conectar — cada tentativa é registrada no log com um marcador claro.
+     */
+    const AD10_SWEEP = [
+      { desc: 'enter[00] + proto 1 + layout A',        enter: [0x00],                    proto: 0x01, layout: 0 },
+      { desc: 'enter[01] + proto 1 + layout A',        enter: [0x01],                    proto: 0x01, layout: 0 },
+      { desc: 'enter[len+id] + proto 1 + layout A',   enter: [0x02, 0x07, 0xDF],        proto: 0x01, layout: 0 },
+      { desc: 'enter[00] + proto 1 + layout B',        enter: [0x00],                    proto: 0x01, layout: 1 },
+      { desc: 'enter[00] + proto 6 + layout A',        enter: [0x00],                    proto: 0x06, layout: 0 },
+      { desc: 'enter[01,00] + proto 1 + layout A',     enter: [0x01, 0x00],             proto: 0x01, layout: 0 },
+      { desc: 'enter[01] + proto 6 + layout B',        enter: [0x01],                    proto: 0x06, layout: 1 }
+    ];
+
+    let ad10SweepIndex = 0;
+    let ad10SweepRunning = false;
+
+    /**
+     * Executa uma tentativa da varredura: 0x6009 + config + pedido OBD2.
+     */
+    async function runAd10SweepStep() {
+      if (!ad10SweepRunning || !isConnectedBle) return;
+      const s = AD10_SWEEP[ad10SweepIndex];
+      ad10SweepIndex++;
+
+      logBle(`▸▸ TENTATIVA ${ad10SweepIndex}/${AD10_SWEEP.length}: ${s.desc}`);
+
+      try {
+        // 1) "enter system" (liga os transceptores CAN)
+        await sendCanFrame(buildAd10Packet(0x6009, s.enter));
+        await new Promise(r => setTimeout(r, 250));
+
+        // 2) Configuração CAN com o protocolo desta tentativa
+        await sendAd10ConfigCommand(buildAd10CanConfigEntries({ protocol: s.proto }));
+        await new Promise(r => setTimeout(r, 350));
+
+        // 3) Pedido OBD2 (RPM) no layout desta tentativa
+        await sendAd10ObdRequest(0x07DF, 0x01, 0x0C, s.layout);
+        await new Promise(r => setTimeout(r, 600));
+      } catch (e) {
+        logBle(`Erro na tentativa: ${e.message || e}`);
+      }
+
+      if (ad10SweepIndex < AD10_SWEEP.length) {
+        setTimeout(runAd10SweepStep, 400);
+      } else {
+        ad10SweepRunning = false;
+        logBle('▸▸ Varredura concluída. Se nenhum frame CAN apareceu, veja o log.');
+      }
+    }
+
+    /**
      * Envia uma requisição OBD2 ao dongle:
      *  1) sub 0x0F (filter_frame) = define o frame CAN no buffer TX do dongle
      *  2) sub 0x16 (send_can_id) = dispara a transmissão
@@ -2588,11 +2644,18 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
         await sendAd10ObdRequest(0x07DF, 0x01, 0x0C);
         await new Promise(r => setTimeout(r, 200));
 
+        // 4) Varredura automática das combinações do gatilho do scanner CAN
+        if (!ad10SweepRunning) {
+          ad10SweepRunning = true;
+          ad10SweepIndex = 0;
+          setTimeout(runAd10SweepStep, 500);
+        }
+
         if (statusEl) {
           statusEl.textContent = 'AD10 500k';
           statusEl.style.color = 'var(--green)';
         }
-        logBle('Handshake AD10 concluído. Aguardando frames CAN da ECU (0x600A)...');
+        logBle('Handshake AD10 concluído. Varredura automática iniciada...');
       } catch (e) {
         logBle(`Erro no handshake AD10: ${e.message || e}`);
       }
@@ -2785,6 +2848,7 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
         <button class="btn btn-secondary" onclick="ad10Exp('req');" style="width:100%; margin-bottom:6px;">📡 Requisição OBD2 (RPM) — layout A</button>
         <button class="btn btn-secondary" onclick="ad10Exp('reqB');" style="width:100%; margin-bottom:6px;">📡 Requisição OBD2 (RPM) — layout B</button>
         <button class="btn btn-secondary" onclick="ad10Exp('enter');" style="width:100%; margin-bottom:6px;">🚪 Enviar 0x6009 (enter system)</button>
+        <button class="btn btn-secondary" onclick="ad10Exp('sweep');" style="width:100%; margin-bottom:6px;">🧪 Rodar varredura completa</button>
         <button class="btn btn-secondary" onclick="ad10Exp('proto6');" style="width:100%; margin-bottom:6px;">🔧 Config com obd_protocol = 6</button>
         <button class="btn btn-secondary" onclick="ad10Exp('cfg');" style="width:100%; margin-bottom:6px;">🔄 Reenviar configuração CAN</button>
         <button class="btn btn-secondary" onclick="toggleObdMode();" style="width:100%; margin-bottom:6px;">🔄 Alternar para ${currentObdMode === 'AD10' ? 'ELM327 Universal' : 'AD10 Nativo'}</button>
@@ -2812,6 +2876,15 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
           // "systerm enter" — comando de nível superior 0x6009 (liga os transceptores CAN)
           await sendCanFrame(buildAd10Packet(0x6009, [0x00]));
           logBle('→ Enviado 0x6009 (enter system) payload=[00]');
+        } else if (kind === 'sweep') {
+          if (ad10SweepRunning) {
+            showToast('⏳ Varredura em andamento', 'Aguarde a varredura atual terminar.', 'info', 3000);
+            return;
+          }
+          ad10SweepRunning = true;
+          ad10SweepIndex = 0;
+          logBle('▸▸ Varredura automática iniciada manualmente.');
+          runAd10SweepStep();
         } else if (kind === 'proto6') {
           await sendAd10ConfigCommand(buildAd10CanConfigEntries({ protocol: 0x06 }));
           logBle('→ Configuração reenviada com obd_protocol = 6');
