@@ -1,5 +1,9 @@
 # 🐛 Problema Atual: Conecta mas RX = 0 / Mostradores Parados
 
+> **🔋 15/11/2026 — BATERIA DO CARRO DESCARREGOU** (ignição ligada ~2 h durante os testes de campo).
+> **O teste de campo da v1.3.7 está PENDENTE.** Todo o trabalho está salvo e commitado — nada se perdeu.
+
+
 > ## ✅ CAUSA RAIZ ENCONTRADA (13/11/2026, v1.2.5)
 >
 > A engenharia reversa com **disassemblador real** (Capstone) do firmware do dongle

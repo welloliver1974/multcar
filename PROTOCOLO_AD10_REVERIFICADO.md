@@ -249,9 +249,9 @@ expôs o desalinhamento de 2 KB na primeira rodada da v1.2.5.
 
 ---
 
-## 6. 🧪 O que o teste de campo provou (14/11/2026)
+## 6. 🧪 O que o teste de campo provou (14–15/11/2026)
 
-O usuário testou a **v1.2.5** no Chevrolet Prisma com o dongle AD10. **O protocolo funcionou:**
+### 6.1. O protocolo funciona (14/11, v1.2.5)
 
 ```
 TX AA 15 03 60 02 01 83 F6      → cmd 0x6002, sub 0x83 (cur_status)
@@ -260,17 +260,60 @@ TX AA 16 26 60 01 0B 01 01 ...  → cmd 0x6001, 11 entradas de config
 RX 55 16 04 60 0B 60 01 01 19   → cmd 0x600B, payload [60 01 01]
 ```
 
-**Conclusões (todas confirmadas no firmware depois):**
-
 | # | Fato | Prova |
 |---|---|---|
 | 1 | Framing, checksum, big-endian e `seq` | ✅ quadros aceitos, 23 OK / 0 inválidos |
-| 2 | `0x6002` funciona | ✅ resposta `cmd=0x6002 payload=[01 83 01]` |
-| 3 | **`0x600B` = ACK do `0x6001`** | firmware `0x08006246`: `r0 = 0x6001 + 0x0A = 0x600B`; payload = `[cmdHi, cmdLo, status]` |
-| 4 | **status `0x01` = configuração ACEITA** | o dongle aceitou nossa config CAN |
-| 5 | **Faltava o gatilho do scanner** | o app oficial envia `0x6009` ("enter system") por item de ECU — nós não enviávamos |
+| 2 | `0x6002` funciona | ✅ `RX ... cmd=0x6002 payload=[01 83 01]` |
+| 3 | **`0x600B` = ACK** | firmware `0x08006246`: `r0 = 0x6001 + 0x0A = 0x600B`; payload = **`[cmdHi, cmdLo, status]`** |
+| 4 | **status `0x01` = ACEITO** | a config CAN é aceita |
 
-### 7.1. Como o dongle transmite um frame CAN
+> ⚠️ **ATENÇÃO:** o ACK `0x600B` tem payload **fixo** `[cmdHi, cmdLo, 0x01]` (o firmware escreve
+> a constante `1`). Ele **NÃO** confirma que a config foi aplicada — só confirma que o quadro chegou.
+
+### 6.2. Diagnóstico ao vivo (15/11) — a descoberta do gatilho
+
+Testando via **adb + logcat** (o próprio celular gravava os logs do app), com a v1.3.2:
+
+```
+TX AA 04 03 60 02 01 82 E2
+RX 55 00 17 60 02 01 82 FF FF FF FF FF FF FF FF FF FF FF FF FF
+RX [0003] FF FF 00 00 00 00 00 09
+  → cmd=0x6002 payload=[01 82 FF…FF 00 00 00 00 00]
+  → "AD10 Número de Série: ÿÿÿ…"
+
+TX AA 01 03 60 02 01 81 E0
+RX 55 01 0D 60 02 01 81 56 30 31 2E 32 30 00 00 00 00 95
+  → "AD10 Versão: V01.20"        ✅ (bate com o firmware analisado!)
+
+TX AA 02 03 60 02 01 80 E2
+RX 55 02 05 60 02 01 80 2E 7C
+  → "Tensão do dongle: 11.90 V"  ✅ (bateria do carro!)
+```
+
+**Conclusão definitiva:** o protocolo BLE está **100% correto**, o dongle é o **AD10_BLE_OBD V01.20**
+(exatamente o firmware que foi disassemblado), e o **NFC/ADC está funcionando**.
+
+### 6.3. 🎯 A CAUSA do "conecta/desconecta" (descoberta 15/11)
+
+```
+TX AA 19 03 60 03 01 05 7D        ← can_scan
+RX 55 15 04 60 0B 60 03 01 1A     ← 0x600B payload=[60 03 01] = can_scan ACEITO (0x01)
+⟪⟪⟪ BLE DESCONECTOU ⟫⟫⟫          ← o dongle REINICIA ao executar o can_scan
+```
+
+**O comando `0x6003 / sub 0x05` (`ble_protocol_can_scan`) liga o scanner CAN e REINICIA o dongle.**
+Antes, o app mandava isso **em loop**, então o dongle nunca terminava de subir e enviar frames.
+
+**Outras descobertas correlatas:**
+
+| Descoberta | Prova |
+|---|---|
+| `0x6001` com **frame CAN cru** no payload = **OVERFLOW** → dongle reinicia | byte `0x08` (DLC) na posição 0 é lido como **contagem de sub-comandos** → ele lê 8 entradas além do buffer |
+| `0x6104` **não existe** nesse firmware | sem resposta |
+| Envelope oficial de 18 bytes | `0x6001 [01][0F][CAN 10 bytes]` = `AA seq 0C 60 01 01 0F …` |
+| O app oficial faz polling com **18 bytes** | medido no logcat (`onWriteCharacteristic length=18`) |
+
+### 6.4. Como o dongle transmite um frame CAN
 
 O sub-comando **`0x0F` (`filter_frame`)** **não** é um filtro de escuta — é o **frame a transmitir**:
 
@@ -340,12 +383,47 @@ callback do módulo `obd_scan` — que é quem **liga os transceptores CAN** dos
 
 ## 8. O que ainda precisa ser confirmado no carro
 
-1. **Layout exato do payload `0x600A`** (frame CAN). O app faz uma varredura heurística:
-   procura o CAN ID `0x07E0`/`0x07E8`/`0x07DF` e, depois, o byte de modo OBD `0x41`.
-2. **Valores de período** (`frame_2_frame`, `over_2_start`, `request_bye_2_bye`, `keep_line`).
-   O app envia `0`, `2`, `200` e `80` (derivados de `period:0/2/200/80/1000` do
-   app ELM327 do próprio XTOOL). Ajustar no código se a ECU não responder.
-3. **`obd_protocol`**: o app envia `1` (ISO15765-4 STD 500K). O enum Java `com.xtool.common.ObdProtocol`
-   também tem `6` (CAN standard) — se não responder, testar `6`.
-4. **`send_can_id` (0x16)** ainda não mapeado: o handler do firmware só repassa 2 bits
-   (flags RTR/extended) para o driver CAN — o ID completo parece vir de outro comando.
+> **🔋 TESTE DE CAMPO DA v1.3.7 PENDENTE** — em 15/11 a **bateria do carro descarregou**
+> (ignição ligada por ~2 h durante os testes de campo). Sem bateria não dá para continuar.
+
+### 8.1. O que já sabemos (confirmado em 15/11)
+
+| # | Fato | Fonte |
+|---|---|---|
+| 1 | Framing, checksum, big-endian, `seq` | logs de campo + logcat ao vivo |
+| 2 | `0x6002` funciona (SN, versão **V01.20**, tensão, status) | logcat ao vivo |
+| 3 | `0x600B` = ACK com payload `[cmdHi, cmdLo, status]` | firmware `0x08006246` |
+| 4 | **`0x6003 / sub 0x05` = `ble_protocol_can_scan` — aceito e REINICIA o dongle** | logcat ao vivo |
+| 5 | Envelope oficial = `0x6001 [01][0F][CAN 10 bytes]` (18 bytes) | app oficial + firmware |
+| 6 | Frame CAN cru no payload = overflow → dongle reinicia | logcat ao vivo |
+
+### 8.2. Sequência correta (implementada na v1.3.7)
+
+```
+1. 0x6002  → sondagem (SN / versão / tensão / status)
+2. 0x6001  → configuração CAN (protocolo, baud, filtros)
+3. 0x6003  → [01][05] can_scan  → dongle REINICIA  ⚠️
+4. silêncio 20 s (o dongle sobe sozinho)
+5. RECONEXÃO automática
+6. 0x6002 + 0x6001  → reaplica config (ela foi perdida no restart)
+7. polling com 0x6001[01][0F][CAN 10 bytes]
+```
+
+### 8.3. O que falta confirmar
+
+1. **Layout exato do payload `0x600A`** (frame CAN). O decoder já tolera 6 layouts.
+2. **Valores de período** (`frame_2_frame`, `over_2_start`, `request_bye_2_bye`, `keep_line`) —
+   hoje `0x00 / 0x02 / 0x00 / 0x00`. Alternativas: `0x00C8` (200) e `0x0050` (80).
+3. **`obd_protocol`** — hoje `0x01` (ISO15765-4 STD 500K). Alternativa: `0x06` (CAN standard).
+4. **Descritor de ECU para o `0x6009`** — só necessário se o `can_scan` não iniciar o scanner
+   sozinho. Pode ser obtido capturando o tráfego do app oficial (`CAPTURAR_TRAFEGO_OFICIAL.md`).
+
+### 8.4. Como validar (quando a bateria estiver resolvida)
+
+1. Instalar `Multcar_Pro_v1.2.apk` (v1.3.7) → badge **`v1.3.7 • 15/11`**
+2. **Ignição II** (motor desligado — sem consumo de combustível)
+3. Conectar → esperar **~40 s** (20 s de silêncio + reconexão + reaplicar config + polling)
+4. Procurar no log:
+   - `✔ Reconectado ao AD10 — reenviando configuração CAN…` → reconexão OK
+   - `🛰️ Frame CAN ID 0x07E8 …` → **DEU CERTO** 🏁
+   - `📊 Resposta OBD2: PID=0x0C` → **RPM chegando** 🏁

@@ -522,6 +522,18 @@ Para facilitar a manutenção contínua e eliminar comandos longos no terminal d
 
 ## 14. Histórico de Versões e Builds
 
+- **v1.3.7 (Build 15/11/2026) — ⭐ CAN_SCAN DESCOBERTO + envelope oficial + reconexão automática:**
+  - **Diagnóstico ao vivo (adb + logcat no celular):** descobriu-se o mecanismo real do dongle.
+  - **`0x6003 / sub 0x05` = `ble_protocol_can_scan`** → o dongle **ACEITA** (ACK `0x600B` com status `0x01`)
+    e **REINICIA**. Enviado em loop, isso derrubava o BLE — a causa do "conecta/desconecta".
+  - **`0x6001` com frame CAN cru = overflow** → o byte `0x08` (DLC) na posição 0 é lido como
+    **contagem de sub-comandos**, e o dongle lê 8 entradas além do buffer → reset.
+  - **Envelope oficial (18 bytes):** `0x6001 [01][0F][CAN 10 bytes]` — idêntico ao app oficial.
+  - **Configuração CAN é perdida no restart do dongle** → o app reaplica após reconectar.
+  - Confirmação de identidade: dongle responde **V01.20** (bete o firmware analisado) e **11,82 V**.
+  - 🔋 **Teste de campo PENDENTE — bateria do carro descarregou (ignição ligada ~2 h).**
+
+
 - **v1.2.6 (Build 14/11/2026 22:21) — ⭐ PEDIDO OBD2 AO DONGLE + PAINEL DE EXPERIMENTOS:**
   - **Teste de campo da v1.2.5 PROVOU o protocolo:** `TX AA 15 03 60 02 01 83 F6` →
     `RX 55 15 04 60 02 01 83 01 F0` (23 quadros OK, 0 inválidos). O `0x600B` é o **ACK** do

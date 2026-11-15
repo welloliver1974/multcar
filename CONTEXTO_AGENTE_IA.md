@@ -213,7 +213,11 @@ E:\Apps\Multcar/
 
 ---
 
-## 6. Estado Atual da Versão (v1.2.6 • Build 14/11 — Pedido OBD2 + Painel de Experimentos)
+## 6. Estado Atual da Versão (v1.3.7 • Build 15/11 — CAN_SCAN + envelope oficial + reconexão)
+
+> **🔋 15/11/2026 — BATERIA DO CARRO DESCARREGOU** (ignição ligada ~2 h durante os testes de campo).
+> **O teste de campo da v1.3.7 está PENDENTE.** Todo o trabalho está salvo e commitado — nada se perdeu.
+
 
 - **Badge Visual:** `<span class="badge version-badge" id="appVersionBadge">v1.2.6 • 14/11</span>`
   (texto curto para não estourar a tela da K2401 1024×600; descrição completa no `title`).

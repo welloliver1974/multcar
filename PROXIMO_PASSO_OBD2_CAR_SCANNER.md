@@ -1,7 +1,10 @@
 # 🛰️ Handoff & Estado Atual do Projeto Multcar Pro
 
 > **Arquivo de handoff do projeto.**  
-> **Última atualização:** 14/nov/2026 (22:20) — **v1.2.6: PROTOCOLO PROVADO NO CARRO + REQUISIÇÃO OBD2**  
+> **Última atualização:** 15/nov/2026 — **v1.3.7: CAN_SCAN + envelope oficial + reconexão automática**
+> **🔋 15/11/2026 — BATERIA DO CARRO DESCARREGOU** (ignição ligada ~2 h durante os testes de campo).
+> **O teste de campo da v1.3.7 está PENDENTE.** Todo o trabalho está salvo e commitado — nada se perdeu.
+  
 > **Veículo Alvo:** Chevrolet Prisma LTZ 1.4 SPE/4 Flex (2015)  
 > **Hardware:** Dongle XTOOL Advancer AD10 (BLE 4.2 / Nordic UART Service)  
 > **Dispositivo Principal:** Central Multimídia K2401 (Android 10) e Smartphone Android  

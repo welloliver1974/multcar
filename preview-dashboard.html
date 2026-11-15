@@ -815,7 +815,7 @@
     <div class="brand">
       <h1>🏎️ MULTCAR</h1>
       <span class="badge">Prisma 1.4</span>
-      <span class="badge version-badge" id="appVersionBadge" title="Multcar Pro v1.3.5 — envelope 0x6001[01][0F][CAN 10B] em 1a ordem">v1.3.5 • 15/11</span>
+      <span class="badge version-badge" id="appVersionBadge" title="Multcar Pro v1.3.5 — envelope 0x6001[01][0F][CAN 10B] em 1a ordem">v1.3.7 • 15/11</span>
     </div>
     <div class="header-actions">
       <div class="status-badge">
@@ -1940,6 +1940,8 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
     };
 
     let ad10TxSeq = 0;
+    let ad10SkipCanScan = false;   // 2a passada: nao repetir o can_scan
+    let ad10ReconnectMac = null;   // MAC salvo para reconexao automatica
 
     /**
      * Construtor de pacotes do XTOOL AD10 (App -> Dongle)
@@ -2684,6 +2686,7 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
         statusEl.style.color = 'var(--yellow)';
       }
 
+      ad10SkipCanScan = false;
       logBle('Iniciando handshake AD10 (protocolo binário oficial 0xAA)...');
       ad10RxState = 0;
       ad10RxFrame = [];
@@ -2702,9 +2705,14 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
         // 1b) ble_protocol_can_scan (0x6003 / sub 0x05) — LIGA o scanner CAN.
         //     O dongle REINICIA ao executar isso (o BLE cai) — então mandamos
         //     UMA VEZ e ficamos em silêncio para ele subir e começar a enviar 0x600A.
-        logBle('→ Enviando can_scan (0x6003/0x05). O dongle vai reiniciar…');
-        await sendCanFrame(buildAd10Packet(0x6003, [0x01, 0x05]));
-        await new Promise(r => setTimeout(r, 12000));
+        if (!ad10SkipCanScan) {
+          logBle('→ Enviando can_scan (0x6003/0x05). O dongle vai reiniciar…');
+          await sendCanFrame(buildAd10Packet(0x6003, [0x01, 0x05]));
+          await new Promise(r => setTimeout(r, 20000));
+          ad10SkipCanScan = true;
+        } else {
+          logBle('→ Reaplicando configuração CAN após o restart do dongle…');
+        }
 
         // 2) Configuração do barramento CAN (0x6001) — igual ao app oficial
         await sendAd10ConfigCommand(buildAd10CanConfigEntries());
@@ -2879,9 +2887,10 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
     function onBleDisconnected() {
       console.warn('[BLE] Dispositivo desconectado');
       logBle(`⟪⟪⟪ BLE DESCONECTOU ⟫⟫⟫ — último quadro TX: ${lastTxFrame}`);
+      if (currentDeviceId) { ad10ReconnectMac = currentDeviceId; }
       // reconecta sozinho (o dongle reinicia ao rodar o can_scan)
       if (isConnectedBle || ad10ReconnectTimer) { /* nada */ }
-      if (!ad10ReconnectTimer && currentDeviceId) {
+      if (!ad10ReconnectTimer && (currentDeviceId || ad10ReconnectMac)) {
         ad10ReconnectTries = 0;
         const tryReconnect = async () => {
           ad10ReconnectTries++;
@@ -2890,10 +2899,12 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
           try {
             if (!isConnectedBle && window.capacitorCommunityBluetoothLe) {
               const BC = window.capacitorCommunityBluetoothLe.BleClient;
-              await BC.connect(currentDeviceId, () => { });
-              await setupBleGattAndListeners(currentDeviceId);
+              const mac = currentDeviceId || ad10ReconnectMac;
+              await BC.connect(mac, () => { });
+              await setupBleGattAndListeners(mac);
               isConnectedBle = true;
-              logBle('✔ Reconectado ao AD10.');
+              logBle('✔ Reconectado ao AD10 — reenviando configuração CAN…');
+              await initAd10Device();
               connDot.className = 'dot connected';
               connText.textContent = 'AD10 OK';
               btnConnectBle.textContent = '🔌 Desconectar';
