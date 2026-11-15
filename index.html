@@ -2495,20 +2495,28 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
     }
 
     /**
-     * Monta o frame CAN 11-bit que o dongle deve transmitir (ISO 15765-4 / GM Delphi):
-     *   [DLC][ID_HI][ID_LO][ISO-TP_LEN][MODE][PID][0x55 …]
-     * A ECU Delphi do Prisma exige DLC 8 com padding 0x55.
+     * Monta o frame CAN 11-bit que o dongle deve transmitir.
+     * O firmware copia esses bytes no buffer TX do dongle (0x20000f55, 20 bytes).
+     *
+     * Variantes suportadas (o layout exato ainda não foi 100% confirmado — o painel
+     * de experimentos permite trocar):
+     *   0 = [DLC][ID_HI][ID_LO][ISO_LEN][MODO][PID][0x55 x5]   (estilo ELM327/DLC 1º)
+     *   1 = [ID_HI][ID_LO][DLC][ISO_LEN][MODO][PID][0x55 x5]   (ID 1º, estilo XTOOL)
+     *   2 = [ID_HI][ID_LO][ISO_LEN][MODO][PID]                 (mínimo, sem padding)
      */
-    function buildAd10CanTxFrame(canId, mode, pid) {
-      const f = [
-        0x08,                       // DLC fixo 8
-        (canId >> 8) & 0xFF,        // CAN ID high
-        canId & 0xFF,               // CAN ID low
-        0x02,                       // ISO-TP single frame: 2 bytes (mode + pid)
-        mode & 0xFF,
-        pid & 0xFF
-      ];
-      while (f.length < 11) f.push(0x55);   // padding GM Delphi
+    function buildAd10CanTxFrame(canId, mode, pid, variant = 0) {
+      const hi = (canId >> 8) & 0xFF;
+      const lo = canId & 0xFF;
+      let f;
+      if (variant === 1) {
+        f = [hi, lo, 0x08, 0x02, mode & 0xFF, pid & 0xFF];
+        while (f.length < 11) f.push(0x55);
+      } else if (variant === 2) {
+        f = [hi, lo, 0x02, mode & 0xFF, pid & 0xFF];
+      } else {
+        f = [0x08, hi, lo, 0x02, mode & 0xFF, pid & 0xFF];
+        while (f.length < 11) f.push(0x55);
+      }
       return f;
     }
 
@@ -2518,9 +2526,9 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
      *  2) sub 0x16 (send_can_id) = dispara a transmissão
      * O dongle responde com a notificação 0x600A.
      */
-    async function sendAd10ObdRequest(canId, mode, pid) {
-      const frame = buildAd10CanTxFrame(canId, mode, pid);
-      logBle(`→ Requisição OBD2: ID 0x${canId.toString(16).toUpperCase()} modo ${mode} PID 0x${pid.toString(16).toUpperCase()}`);
+    async function sendAd10ObdRequest(canId, mode, pid, variant = 0) {
+      const frame = buildAd10CanTxFrame(canId, mode, pid, variant);
+      logBle(`→ Requisição OBD2 (layout ${variant}): ID 0x${canId.toString(16).toUpperCase()} modo ${mode} PID 0x${pid.toString(16).toUpperCase()} frame=[${hexDump(frame)}]`);
       await sendAd10ConfigCommand([[AD10_CFG.FILTER_FRAME, frame]]);
       await new Promise(r => setTimeout(r, 60));
       await sendAd10ConfigCommand([[AD10_CFG.SEND_CAN_ID,
@@ -2774,7 +2782,8 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
         <strong>Quadros OK:</strong> ${ad10RxFramesOk} | <strong>Quadros inválidos:</strong> ${ad10RxFramesBad}<br>
         <strong>Último Hex RX:</strong> ${document.getElementById('telemetryLastHex')?.textContent || '--'}<br><br>
         <strong>🧪 Experimentos (toque para executar):</strong><br>
-        <button class="btn btn-secondary" onclick="ad10Exp('req');" style="width:100%; margin-bottom:6px;">📡 Requisição OBD2 (RPM)</button>
+        <button class="btn btn-secondary" onclick="ad10Exp('req');" style="width:100%; margin-bottom:6px;">📡 Requisição OBD2 (RPM) — layout A</button>
+        <button class="btn btn-secondary" onclick="ad10Exp('reqB');" style="width:100%; margin-bottom:6px;">📡 Requisição OBD2 (RPM) — layout B</button>
         <button class="btn btn-secondary" onclick="ad10Exp('enter');" style="width:100%; margin-bottom:6px;">🚪 Enviar 0x6009 (enter system)</button>
         <button class="btn btn-secondary" onclick="ad10Exp('proto6');" style="width:100%; margin-bottom:6px;">🔧 Config com obd_protocol = 6</button>
         <button class="btn btn-secondary" onclick="ad10Exp('cfg');" style="width:100%; margin-bottom:6px;">🔄 Reenviar configuração CAN</button>
@@ -2796,7 +2805,9 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
       }
       try {
         if (kind === 'req') {
-          await sendAd10ObdRequest(0x07DF, 0x01, 0x0C);
+          await sendAd10ObdRequest(0x07DF, 0x01, 0x0C, 0);
+        } else if (kind === 'reqB') {
+          await sendAd10ObdRequest(0x07DF, 0x01, 0x0C, 1);
         } else if (kind === 'enter') {
           // "systerm enter" — comando de nível superior 0x6009 (liga os transceptores CAN)
           await sendCanFrame(buildAd10Packet(0x6009, [0x00]));
