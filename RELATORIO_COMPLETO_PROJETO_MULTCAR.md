@@ -522,6 +522,25 @@ Para facilitar a manutenção contínua e eliminar comandos longos no terminal d
 
 ## 14. Histórico de Versões e Builds
 
+- **v1.2.6 (Build 14/11/2026 22:21) — ⭐ PEDIDO OBD2 AO DONGLE + PAINEL DE EXPERIMENTOS:**
+  - **Teste de campo da v1.2.5 PROVOU o protocolo:** `TX AA 15 03 60 02 01 83 F6` →
+    `RX 55 15 04 60 02 01 83 01 F0` (23 quadros OK, 0 inválidos). O `0x600B` é o **ACK** do
+    `0x6001` com **status `0x01` = config ACEITA** (firmware `0x08006246` → `cmd = 0x6001 + 0x0A`).
+  - **Descoberta do mecanismo de transmissão CAN (firmware):**
+    - sub `0x0F` (`filter_frame`) **não** é filtro de escuta — é o **frame a transmitir**:
+      `0x080068f8: bl 0x8008b38` → `memcpy(0x20000f55, dados, len)` (buffer TX do dongle);
+    - sub `0x16` (`send_can_id`) **dispara** o envio (`0x08006bfc: bl 0x8008b14`).
+  - **Implementado:** `sendAd10ObdRequest()` monta o frame CAN `[0x08][ID_HI][ID_LO][0x02][modo][PID][0x55…]`
+    (DLC 8 + padding GM Delphi) e envia `0x6001[0x0F]` + `0x6001[0x16]`.
+  - **Config CAN reescrita na ordem do app oficial** (`CAD10Prot::InitHardware`):
+    `bps → filter_len → filter_type → filter_cnt → filter_ids → obd_protocol → req_bye_2_bye →
+    over_2_start → frame_2_frame → bye_2_bye → keep_line(=0)`.
+  - **Polling rotativo** com 9 PIDs (0x0C, 0x0D, 0x05, 0x42, 0x0B, 0x11, 0x04, 0x07, 0x14).
+  - **Painel de experimentos** no Diagnóstico BLE: pedido OBD2 · `0x6009` (enter system) ·
+    config com `obd_protocol=6` · reenviar config · **console HEX bruto**.
+  - **APK Gerado:** [`Multcar_Pro_v1.2.apk`](file:///E:/Apps/Multcar/Multcar_Pro_v1.2.apk) e
+    [`Multcar_Pro_v1.0.apk`](file:///E:/Apps/Multcar/Multcar_Pro_v1.0.apk) (4.27 MB) com `versionCode 9`, `versionName 1.2.6`.
+
 - **v1.2.5 (Build 13/11/2026 22:06) — ⭐ PROTOCOLO BINÁRIO DO AD10 CORRIGIDO:**
   - **Engenharia reversa refeita com disassemblador real (Capstone)** no firmware do dongle
     (`ble_obd.bin`, base do flash `0x08002000`) **e** no app oficial (`libobdcore.so`, ARM64),

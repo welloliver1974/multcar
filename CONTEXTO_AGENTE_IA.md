@@ -213,48 +213,61 @@ E:\Apps\Multcar/
 
 ---
 
-## 6. Estado Atual da Versão (v1.2.5 • Build 13/11 — Protocolo AD10 Corrigido)
+## 6. Estado Atual da Versão (v1.2.6 • Build 14/11 — Pedido OBD2 + Painel de Experimentos)
 
-- **Badge Visual:** `<span class="badge version-badge" id="appVersionBadge">v1.2.5 • 13/11</span>`
+- **Badge Visual:** `<span class="badge version-badge" id="appVersionBadge">v1.2.6 • 14/11</span>`
   (texto curto para não estourar a tela da K2401 1024×600; descrição completa no `title`).
-- **Protocolo:** quadro de requisição `0xAA` com **cmd big-endian**; resposta `0x55` com escape `0x56`.
-- **Sub-comandos:** `AD10_CFG` (grupo `0x6001`) e `AD10_OBD` (grupo `0x6002`) — tabelas reescritas a partir do firmware.
+- **Protocolo (PROVADO no carro em 14/11):** quadro de requisição `0xAA` com **cmd big-endian**;
+  resposta `0x55` com escape `0x56`. No teste de campo: `TX AA 15 03 60 02 01 83 F6` →
+  `RX 55 15 04 60 02 01 83 01 F0` (23 quadros OK, 0 inválidos).
+- **ACK `0x600B`:** resposta ao `0x6001`; payload = `[cmdHi, cmdLo, status]`.
+  **status `0x01` = configuração ACEITA** (fonte: firmware `0x08006246` → `cmd = 0x6001 + 0x0A`).
+- **Sub-comandos `0x6001` (tabelas `AD10_CFG` / `AD10_OBD`)** reescritas do firmware.
+- **Pedido OBD2 (novo na v1.2.6):**
+  - sub `0x0F` (`filter_frame`) = **frame CAN a transmitir** (vai para o buffer TX `0x20000f55` do firmware);
+  - sub `0x16` (`send_can_id`) = **dispara** o envio (4 bytes BE com o CAN ID);
+  - frame CAN montado: `[0x08][ID_HI][ID_LO][0x02][modo][PID][0x55 …]` (DLC 8 + padding GM Delphi).
+- **Polling:** rotaciona 9 PIDs (0x0C, 0x0D, 0x05, 0x42, 0x0B, 0x11, 0x04, 0x07, 0x14) e reenvia a
+  configuração CAN a cada ~5 s.
+- **Config CAN na ordem do app oficial** (`CAD10Prot::InitHardware`):
+  `bps → filter_len → filter_type → filter_cnt → filter_ids → obd_protocol →
+  req_bye_2_bye → over_2_start → frame_2_frame → bye_2_bye → keep_line(=0)`.
 - **Parser de resposta:** re-assembla quadros entre notificações BLE e valida o checksum.
 - **Notificações `0x600A`:** frames CAN da ECU → decoder ISO-TP robusto (6 layouts testados).
-- **Seletor Dual-Mode em 1 Toque:**
-  - Botão `[⚡ AD10 Nativo]` / `[⚡ ELM327 Universal]`.
-  - Padrão: **`⚡ AD10 Nativo`** (frames binários `0xAA`).
-  - O modo ELM327 serve para dongles ELM327 reais — **o AD10 não tem interpretador AT** (confirmado no firmware).
-- **Diagnóstico Touch:** um toque na **Barra de Telemetria** abre o modal com log **TX/RX bruto**,
-  contador de quadros OK/inválidos e o botão **"🛰️ Reenviar configuração CAN"**.
+- **Painel de experimentos (novo):** no Diagnóstico BLE há botões para
+  *pedido OBD2* · *`0x6009` (enter system)* · *config com `obd_protocol=6`* ·
+  *reenviar config* e um **console HEX bruto** para mandar qualquer quadro à mão.
 - **Testes automatizados:**
   - `node tools/reversing/ad10/test_frame.js` — round-trip do quadro contra o parser real do firmware.
   - `node tools/reversing/ad10/test_can_decode.js` — decoder de frames CAN em 6 layouts de payload.
+  - `python tools/reversing/ad10/fw_selfcheck.py` — valida base/alinhamento/tabelas do firmware.
 - **Status do Build:** `gradlew assembleDebug` → `BUILD SUCCESSFUL`; copiado para `Multcar_Pro_v1.2.apk`
-  e `Multcar_Pro_v1.0.apk`; sincronizado no GitHub.
+  e `Multcar_Pro_v1.0.apk` (versionCode 9); sincronizado no GitHub.
 
 ---
 
 ## 7. Onde Paramos e O Que Esperar no Próximo Teste
 
 ### Onde Estamos Exatamente:
-A v1.2.5 foi **compilada, instalada e testada no celular** (instalação OK, badge ajustado).
-**Falta o teste de campo no veículo** — ainda não foi feito.
+- **14/11/2026:** o teste de campo da **v1.2.5** **provou que o protocolo binário funciona**
+  (framing/checksum/big-endian OK, `0x6002` respondendo, config CAN aceita com status `0x01`).
+- **Ainda não chegam frames CAN da ECU (`0x600A`)** → faltava o gatilho do scanner e o pedido OBD2.
+- A **v1.2.6** implementa o pedido OBD2 (`0x0F` + `0x16`), envia `0x6009` (enter system),
+  corrige a ordem/valores da config e adiciona o painel de experimentos.
+- **Falta:** testar a v1.2.6 no veículo.
 
 ### O Que Deve Ser Verificado no Teste (no carro):
-1. **Badge de Versão:** confirmar **`v1.2.5 • 13/11`**.
-2. **Conexão BLE:** tocar em **"📡 Conectar"**. O link deve ficar estável (notificações só no canal `0003`).
-3. **Sondagem `0x6002` (não precisa do carro):** o log deve mostrar
-   `✔ Quadro AD10 seq=… cmd=0x6002 …` e `AD10 Número de Série: …`.
-   → Se isso aparecer, **o framing está 100% correto** e o resto é só a parte CAN.
-4. **Resposta do carro:** o dongle deve emitir notificações `0x600A` com os frames da ECU
-   (`🛰️ Frame CAN ID 0x07E8 …` e `📊 Resposta OBD2: modo=41 PID=0x0C …`).
-5. **Se o RX continuar em 0 no veículo:**
+1. **Badge de Versão:** confirmar **`v1.2.6 • 14/11`**.
+2. **Conexão BLE:** tocar em **"📡 Conectar"**; link estável (notificações só no canal `0003`).
+3. **Sondagem `0x6002`:** o log deve mostrar `✔ Quadro AD10 … cmd=0x6002 …` e o número de série.
+4. **ACK da config:** `✔ Quadro AD10 … cmd=0x600B payload=[60 01 01]` → status `0x01` = aceito.
+5. **Resposta do carro:** deve aparecer `🛰️ Frame CAN ID 0x07E8 …` e
+   `📊 Resposta OBD2: modo=41 PID=0x0C …` → os mostradores se movem.
+6. **Se não chegar frame:**
    - Abrir o **Diagnóstico BLE** e copiar o **log bruto**.
-   - Ajustar os **valores de período** do scanner (`frame_2_frame`, `over_2_start`,
-     `request_bye_2_bye`, `keep_line` — hoje `0/2/200/80`) e/ou o `obd_protocol`
-     (hoje `1`; alternativa `6` = CAN standard).
-   - Confirmar o **layout do payload `0x600A`** (o decoder já é tolerante a 6 layouts).
+   - Usar o **painel de experimentos**: `0x6009`, `obd_protocol=6`, reenviar config.
+   - Ajustar os **períodos** em `buildAd10CanConfigEntries()` (`0x03/0x04/0x05/0x06/0x07`) e os
+     **IDs de filtro** (`0x12`).
 
 ---
 
