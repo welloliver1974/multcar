@@ -108,47 +108,44 @@ Ambos foram corrigidos e **validados no firmware `ble_obd.bin` e no app oficial 
 
 ---
 
-## 4. Próximo Passo do Usuário no Veículo (v1.2.6)
+## 4. Próximo Passo do Usuário no Veículo (v1.3.7)
 
-> **Estado:** protocolo **provado** (v1.2.5). A v1.2.6 adiciona o **gatilho do scanner** e o
-> **pedido OBD2**. Falta só o teste de campo desta versão.
+> **🔋 PRÉ-REQUISITO: BATERIA DO CARRO CARREGADA.**
+> Em 15/11 a bateria descarregou (ignição ligada ~2 h durante os testes). Para resolver sem gastar
+> gasolina: **2ª marcha + empurrar para pegar no embalo** (solte a embreagem rápido) **ou** chupeta
+> de outro carro. Não tente empurrar sozinho.
 
-1. **Instalar a v1.2.6** — baixar e instalar o [`Multcar_Pro_v1.2.apk`](file:///E:/Apps/Multcar/Multcar_Pro_v1.2.apk).
-2. **Conferir o carimbo:** badge verde no topo com **`v1.2.6 • 14/11`**.
-3. **Preparar o ambiente:**
-   - Ignição do Prisma na **posição II** (painel todo aceso, LED do AD10 aceso).
-     💡 *Se puder, deixe o **motor ligado** — alguns ECMs só respondem com o motor运转.*
-   - **Fechar todos** os outros apps OBD2 (XTOOL oficial, Car Scanner, Torque).
-   - **Bluetooth + Localização (GPS) LIGADOS** no celular.
-4. **Tocar em "📡 Conectar"** e observar a telemetria.
-5. **Abrir o Diagnóstico** (toque na **Barra de Telemetria**) e copiar o **log bruto**.
+> **Estado:** o protocolo está **provado** (v1.2.5), o **can_scan** foi descoberto (15/11) e a
+> v1.3.7 implementa a sequência correta. Falta só o teste de campo.
 
-### 🧪 Painel de experimentos (novo na v1.2.6)
+1. **Instalar a v1.3.7** — [`Multcar_Pro_v1.2.apk`](file:///E:/Apps/Multcar/Multcar_Pro_v1.2.apk)
+   (badge **`v1.3.7 • 15/11`**). Se preferir, peça para instalar por **adb** (sem mexer no celular).
+2. **Ignição na posição II** (painel aceso, LED do AD10 aceso) — **motor DESLIGADO** (não gasta combustível).
+3. **Fechar todos os outros apps OBD2** (XTOOL oficial, Car Scanner, Torque).
+4. **Bluetooth + Localização (GPS) LIGADOS.**
+5. **Tocar em "📡 Conectar" e ESPERAR ~40 s:**
+   - `0x6002` (sondagem) → `0x6001` (config CAN) → `0x6003` can_scan → **dongle reinicia**
+   - **20 s de silêncio** (o dongle sobe)
+   - **reconexão automática** → `0x6002` + `0x6001` de novo (reaplica config)
+   - polling com `0x6001 [01][0F][CAN 10 bytes]`
+6. **Abrir o Diagnóstico** (toque na Barra de Telemetria) e copiar o **log bruto**.
 
-No modal de diagnóstico há botões que executam testes pontuais:
-
-| Botão | O que faz |
-|---|---|
-| 📡 **Requisição OBD2 (RPM)** | envia `0x0F` (frame CAN `07DF 08 02 01 0C 55×5`) + `0x16` (send_can_id) |
-| 🚪 **Enviar 0x6009 (enter system)** | teste do "systerm enter" (liga os transceptores CAN) |
-| 🔧 **Config com obd_protocol = 6** | alterna para CAN standard |
-| 🔄 **Reenviar configuração CAN** | reenvia a config completa |
-| 📤 **Enviar HEX bruto** | console para mandar qualquer quadro à mão |
-
-### Como interpretar o log
+### 🧪 Como ler o log
 
 | O que aparece | Significado |
 |---|---|
-| `TX AA .. 60 02 01 83 ..` | ✅ cmd big-endian correto |
-| `✔ Quadro AD10 seq=… cmd=0x6002 payload=[01 83 01]` | 🎉 o dongle responde |
-| `✔ Quadro AD10 … cmd=0x600B payload=[60 01 01]` | ✅ **config ACEITA** (status 0x01) |
-| `🛰️ Frame CAN ID 0x07E8 …` | 🏁 **chegou frame da ECU** |
+| `✔ Reconectado ao AD10 — reenviando configuração CAN…` | reconexão após o restart OK ✅ |
+| `✔ Quadro AD10 … cmd=0x600B payload=[60 03 01]` | **can_scan aceito** (status 0x01) ✅ |
+| `✔ Quadro AD10 … cmd=0x6002 payload=[01 81 56 30 31 2E 32 30]` | **versão V01.20** ✅ |
+| `🛰️ Frame CAN ID 0x07E8 …` | 🏁 **DEU CERTO** — a ECU respondeu |
 | `📊 Resposta OBD2: modo=41 PID=0x0C …` | 🏁 **RPM chegando** |
-| `Quadro não tratado cmd=0x600A` | chegou frame, mas o layout do payload difere → **manda o log** |
+| `⟪⟪⟪ BLE DESCONECTOU ⟫⟫⟫` | o dongle reiniciou (esperado no can_scan) |
+| `Quadro não tratado cmd=0x600A` | chegou frame CAN, mas o layout do payload difere → **manda o log** |
+| só `0x600B` sem `0x600A` | scanner ainda não iniciou → ver ajustes abaixo |
 
 ### Se ainda não chegar frame CAN
 
-Ajustar, em `multcar-app/www/index.html` → `buildAd10CanConfigEntries()`:
+Ajustar em `multcar-app/www/index.html` → `buildAd10CanConfigEntries()`:
 
 | Parâmetro | Valor atual | Alternativa |
 |---|---|---|
@@ -157,11 +154,16 @@ Ajustar, em `multcar-app/www/index.html` → `buildAd10CanConfigEntries()`:
 | `OVER_2_START` | `0x0002` | `0x0000` |
 | `FRAME_2_FRAME` | `0x0000` | `0x0002` |
 | `BYE_2_BYE` | `0x0000` | `0x00C8` |
-| `KEEP_LINE` | `0x00` | `0x50` (80) |
+| `KEEP_LINE` | `0x00` | `0x0050` (80) |
 | `FILTER_ID` | `0x07E0` + `0x07E8` | incluir `0x07DF` |
 
-Referência de período: a string `CAN,std,0,pin:6+14,07df/07e0/07f0,period:0/2/200/80/1000`
-do app ELM327 da própria XTOOL.
+E, se o payload `0x600A` tiver outro layout, ajustar o `dataStart` em `handleAd10CanFrame()`
+(o decoder já tolera 6 layouts).
+
+### Plano B — capturar o app oficial (se o can_scan não bastar)
+
+Ver [`CAPTURAR_TRAFEGO_OFICIAL.md`](file:///E:/Apps/Multcar/CAPTURAR_TRAFEGO_OFICIAL.md).
+Com `adb` (USB ou WiFi) dá para extrair os bytes que o app oficial manda e replicar byte a byte.
 
 ### Ferramentas de análise (para a próxima sessão)
 
