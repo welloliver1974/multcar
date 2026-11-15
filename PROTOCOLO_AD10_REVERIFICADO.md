@@ -249,7 +249,78 @@ expôs o desalinhamento de 2 KB na primeira rodada da v1.2.5.
 
 ---
 
-## 6. Referências de código (para auditoria futura)
+## 6. 🧪 O que o teste de campo provou (14/11/2026)
+
+O usuário testou a **v1.2.5** no Chevrolet Prisma com o dongle AD10. **O protocolo funcionou:**
+
+```
+TX AA 15 03 60 02 01 83 F6      → cmd 0x6002, sub 0x83 (cur_status)
+RX 55 15 04 60 02 01 83 01 F0   → cmd 0x6002, payload [01 83 01]   ✅
+TX AA 16 26 60 01 0B 01 01 ...  → cmd 0x6001, 11 entradas de config
+RX 55 16 04 60 0B 60 01 01 19   → cmd 0x600B, payload [60 01 01]
+```
+
+**Conclusões (todas confirmadas no firmware depois):**
+
+| # | Fato | Prova |
+|---|---|---|
+| 1 | Framing, checksum, big-endian e `seq` | ✅ quadros aceitos, 23 OK / 0 inválidos |
+| 2 | `0x6002` funciona | ✅ resposta `cmd=0x6002 payload=[01 83 01]` |
+| 3 | **`0x600B` = ACK do `0x6001`** | firmware `0x08006246`: `r0 = 0x6001 + 0x0A = 0x600B`; payload = `[cmdHi, cmdLo, status]` |
+| 4 | **status `0x01` = configuração ACEITA** | o dongle aceitou nossa config CAN |
+| 5 | **Faltava o gatilho do scanner** | o app oficial envia `0x6009` ("enter system") por item de ECU — nós não enviávamos |
+
+### 7.1. Como o dongle transmite um frame CAN
+
+O sub-comando **`0x0F` (`filter_frame`)** **não** é um filtro de escuta — é o **frame a transmitir**:
+
+```c
+// ble_obd.bin @ 0x080068ed  (handler do sub 0x0F)
+0x080068f0: bl 0x80089dc        ; r0 = bytes restantes no buffer RX
+0x080068f4: mov r1, r0
+0x080068f6: mov r0, r4
+0x080068f8: bl 0x8008b38        ; memcpy(0x20000f55, dados, len)  <= BUFFER TX
+```
+
+E o sub-comando **`0x16` (`send_can_id`)** **dispara** o envio:
+
+```c
+// ble_obd.bin @ 0x08006bd0  (handler do sub 0x16)
+0x08006bd6: bl 0x8007652        ; r0 = read32BE(dados[0..3])
+...
+0x08006bfc: bl 0x8008b14        ; can_tx(...) -> flags em 0x20000f86
+```
+
+> **Conclusão:** para pedir um PID ao ECU é preciso
+> **1)** `0x6001` sub `0x0F` com o frame CAN cru
+> **2)** `0x6001` sub `0x16` com o CAN ID (4 bytes BE).
+
+### 7.2. Ordem oficial dos sub-comandos (`0x6001`)
+
+Extraída de `CAD10Prot::InitHardware` (`libobdcore.so` @ `0x15d20`):
+
+```
+0x02 bps → 0x0E filter_frame_len → 0x10 can_filter_type → 0x11 can_filter_cnt
+→ 0x12 filter IDs → 0x01 obd_protocol → 0x06 → 0x05 → 0x04 → 0x03 → 0x07 keep_line(=0)
+```
+
+> A v1.2.5 usava outra ordem, não tinha o `0x03` e mandava `keep_line = 80`
+> (o app oficial manda **0**). **Corrigido na v1.2.6.**
+
+### 7.3. Comando `0x6009` ("enter system")
+
+O app oficial envia `0x6009` **uma vez por item de ECU**, com payload `[len][dados]`
+(família `0x6004 + índice`, índice 5 → `0x6009`; `libobdcore.so` @ `0x16e68`).
+No firmware, `0x6009` é um trampolim que repassa `(payload[0], payload+1)` para o
+callback do módulo `obd_scan` — que é quem **liga os transceptores CAN** dos pinos 6/14.
+
+> ⚠️ O **conteúdo do descritor** por item de ECU ainda não foi totalmente mapeado
+> (vem da base de dados OBD do app oficial). A v1.2.6 envia uma variante simples
+> (`payload = [0x00]`) e o painel de experimentos permite testar outras.
+
+---
+
+## 7. Referências de código (para auditoria futura)
 
 | Item | Endereço |
 |---|---|
@@ -267,7 +338,7 @@ expôs o desalinhamento de 2 KB na primeira rodada da v1.2.5.
 
 ---
 
-## 7. O que ainda precisa ser confirmado no carro (teste de campo pendente)
+## 8. O que ainda precisa ser confirmado no carro
 
 1. **Layout exato do payload `0x600A`** (frame CAN). O app faz uma varredura heurística:
    procura o CAN ID `0x07E0`/`0x07E8`/`0x07DF` e, depois, o byte de modo OBD `0x41`.

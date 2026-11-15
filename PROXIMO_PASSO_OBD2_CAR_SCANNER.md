@@ -1,7 +1,7 @@
 # 🛰️ Handoff & Estado Atual do Projeto Multcar Pro
 
 > **Arquivo de handoff do projeto.**  
-> **Última atualização:** 13/nov/2026 (22:10) — **v1.2.5: PROTOCOLO BINÁRIO DO AD10 CORRIGIDO!**  
+> **Última atualização:** 14/nov/2026 (22:20) — **v1.2.6: PROTOCOLO PROVADO NO CARRO + REQUISIÇÃO OBD2**  
 > **Veículo Alvo:** Chevrolet Prisma LTZ 1.4 SPE/4 Flex (2015)  
 > **Hardware:** Dongle XTOOL Advancer AD10 (BLE 4.2 / Nordic UART Service)  
 > **Dispositivo Principal:** Central Multimídia K2401 (Android 10) e Smartphone Android  
@@ -21,6 +21,31 @@ Até a v1.2.4 o app **nunca poderia ler o carro**, por dois bugs de framing:
 Ambos foram corrigidos e **validados no firmware `ble_obd.bin` e no app oficial `libobdcore.so`**.
 
 > 📘 **Fonte da verdade do protocolo:** [`PROTOCOLO_AD10_REVERIFICADO.md`](PROTOCOLO_AD10_REVERIFICADO.md)
+
+---
+
+## 0. ✅ RESULTADO DO TESTE DE CAMPO DA v1.2.5 (14/11/2026)
+
+> **O PROTOCOLO FUNCIONOU.** O log do usuário provou:
+>
+> ```
+> TX AA 15 03 60 02 01 83 F6      → cmd 0x6002, sub 0x83 (cur_status)
+> RX 55 15 04 60 02 01 83 01 F0   → cmd 0x6002, payload [01 83 01]   ✅
+> TX AA 16 26 60 01 0B 01 01 ...  → cmd 0x6001 (config CAN, 11 entradas)
+> RX 55 16 04 60 0B 60 01 01 19   → cmd 0x600B, payload [60 01 01]
+> ```
+>
+> - ✅ **Framing, checksum, big-endian do comando e `seq`: PERFEITOS** (23 quadros OK, 0 inválidos)
+> - ✅ **`0x6002` responde** (cur_status = 1)
+> - ✅ **`0x600B` = ACK do `0x6001`** com **status `0x01` = configuração ACEITA**
+>   (confirmado no firmware: `0x08006246` → `cmd = 0x6001 + 0x0A = 0x600B`)
+> - ❌ **Ainda não chega frame CAN da ECU (0x600A)** → faltava o *gatilho* do scanner
+>
+> **O que faltava (e a v1.2.6 corrige):**
+> 1. **O app oficial envia `0x6009` ("enter system")** por item de ECU — nós não enviávamos.
+> 2. **A ordem e os valores dos sub-comandos da config** estavam diferentes do app oficial.
+> 3. **Faltava o pedido OBD2 propriamente dito**: o sub `0x0F` (`filter_frame`) define o frame CAN
+>    a transmitir e o sub `0x16` (`send_can_id`) dispara o envio.
 
 ---
 
@@ -80,41 +105,56 @@ Ambos foram corrigidos e **validados no firmware `ble_obd.bin` e no app oficial 
 
 ---
 
-## 4. Próximo Passo do Usuário no Veículo (v1.2.5)
+## 4. Próximo Passo do Usuário no Veículo (v1.2.6)
 
-> **Estado:** APK instalado e testado **no celular** (instalação OK). **Falta o teste de campo.**
+> **Estado:** protocolo **provado** (v1.2.5). A v1.2.6 adiciona o **gatilho do scanner** e o
+> **pedido OBD2**. Falta só o teste de campo desta versão.
 
-1. **Instalar a v1.2.5** — baixar e instalar o [`Multcar_Pro_v1.2.apk`](file:///E:/Apps/Multcar/Multcar_Pro_v1.2.apk).
-2. **Conferir o carimbo:** badge verde no topo com **`v1.2.5 • 13/11`**.
+1. **Instalar a v1.2.6** — baixar e instalar o [`Multcar_Pro_v1.2.apk`](file:///E:/Apps/Multcar/Multcar_Pro_v1.2.apk).
+2. **Conferir o carimbo:** badge verde no topo com **`v1.2.6 • 14/11`**.
 3. **Preparar o ambiente:**
    - Ignição do Prisma na **posição II** (painel todo aceso, LED do AD10 aceso).
+     💡 *Se puder, deixe o **motor ligado** — alguns ECMs só respondem com o motor运转.*
    - **Fechar todos** os outros apps OBD2 (XTOOL oficial, Car Scanner, Torque).
    - **Bluetooth + Localização (GPS) LIGADOS** no celular.
 4. **Tocar em "📡 Conectar"** e observar a telemetria.
 5. **Abrir o Diagnóstico** (toque na **Barra de Telemetria**) e copiar o **log bruto**.
 
+### 🧪 Painel de experimentos (novo na v1.2.6)
+
+No modal de diagnóstico há botões que executam testes pontuais:
+
+| Botão | O que faz |
+|---|---|
+| 📡 **Requisição OBD2 (RPM)** | envia `0x0F` (frame CAN `07DF 08 02 01 0C 55×5`) + `0x16` (send_can_id) |
+| 🚪 **Enviar 0x6009 (enter system)** | teste do "systerm enter" (liga os transceptores CAN) |
+| 🔧 **Config com obd_protocol = 6** | alterna para CAN standard |
+| 🔄 **Reenviar configuração CAN** | reenvia a config completa |
+| 📤 **Enviar HEX bruto** | console para mandar qualquer quadro à mão |
+
 ### Como interpretar o log
 
 | O que aparece | Significado |
 |---|---|
-| `TX AA 00 03 60 02 01 82 E2` | ✅ quadro saindo com **cmd big-endian** (bug 1 corrigido) |
-| `✔ Quadro AD10 seq=… cmd=0x6002 payload=[…]` | 🎉 **o dongle respondeu** (bug 2 corrigido) |
-| `AD10 Número de Série: …` | protocolo 100% funcionando |
-| `⚠️ RX checksum inválido` | ainda é bug de framing → mandar o log |
-| `🛰️ Frame CAN ID 0x07E8 …` + `📊 Resposta OBD2: …` | 🏁 **dados da ECU chegando** |
+| `TX AA .. 60 02 01 83 ..` | ✅ cmd big-endian correto |
+| `✔ Quadro AD10 seq=… cmd=0x6002 payload=[01 83 01]` | 🎉 o dongle responde |
+| `✔ Quadro AD10 … cmd=0x600B payload=[60 01 01]` | ✅ **config ACEITA** (status 0x01) |
+| `🛰️ Frame CAN ID 0x07E8 …` | 🏁 **chegou frame da ECU** |
+| `📊 Resposta OBD2: modo=41 PID=0x0C …` | 🏁 **RPM chegando** |
+| `Quadro não tratado cmd=0x600A` | chegou frame, mas o layout do payload difere → **manda o log** |
 
-### Se o `0x6002` responder mas o carro não responder
+### Se ainda não chegar frame CAN
 
-O link e o framing estão perfeitos; o que falta é só a configuração do scanner CAN.
 Ajustar, em `multcar-app/www/index.html` → `buildAd10CanConfigEntries()`:
 
 | Parâmetro | Valor atual | Alternativa |
 |---|---|---|
 | `OBD_PROTOCOL` | `0x01` (ISO15765-4 STD 500K) | `0x06` (CAN standard) |
-| `FRAME_2_FRAME` | `0x0000` | — |
-| `OVER_2_START` | `0x0002` | — |
-| `REQ_BYE_2_BYE` | `0x00C8` (200) | — |
-| `KEEP_LINE` | `0x50` (80) | — |
+| `REQ_BYE_2_BYE` | `0x0000` | `0x00C8` (200) |
+| `OVER_2_START` | `0x0002` | `0x0000` |
+| `FRAME_2_FRAME` | `0x0000` | `0x0002` |
+| `BYE_2_BYE` | `0x0000` | `0x00C8` |
+| `KEEP_LINE` | `0x00` | `0x50` (80) |
 | `FILTER_ID` | `0x07E0` + `0x07E8` | incluir `0x07DF` |
 
 Referência de período: a string `CAN,std,0,pin:6+14,07df/07e0/07f0,period:0/2/200/80/1000`
@@ -123,6 +163,9 @@ do app ELM327 da própria XTOOL.
 ### Ferramentas de análise (para a próxima sessão)
 
 ```powershell
+# self-check do ambiente (base, alinhamento, tabelas)
+python tools\reversing\ad10\fw_selfcheck.py
+
 # disassemblar o firmware do dongle (base flash 0x08002000)
 python tools\reversing\ad10\fw_dis.py 0x08005af0 0x08005c50 "ble_protocol_analy_char"
 

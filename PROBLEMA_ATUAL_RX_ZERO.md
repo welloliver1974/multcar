@@ -13,12 +13,21 @@
 >
 > **Detalhe completo:** [`PROTOCOLO_AD10_REVERIFICADO.md`](PROTOCOLO_AD10_REVERIFICADO.md)
 >
-> **O que ainda falta confirmar no carro:** o layout exato do payload `0x600A` (frame CAN) e os
-> valores de período do scanner. O app usa varredura heurística (procura `0x07E0`/`0x07E8` e o byte
-> de modo `0x41`) e reenvia a configuração CAN a cada 2 s.
+> ---
+>
+> ## ✅ PROTOCOLO PROVADO NO CARRO (14/11/2026, teste da v1.2.5)
+>
+> O log do teste em campo **confirmou** que os 3 bugs acima estavam corrigidos:
+> `TX AA 15 03 60 02 01 83 F6` → `RX 55 15 04 60 02 01 83 01 F0` ✅ (23 quadros OK, 0 inválidos).
+>
+> **Restava um único item:** o app **configurava** o dongle (ACK `0x600B`, status `0x01` = aceito),
+> mas **nunca iniciava o scanner CAN** — faltava o comando `0x6009` ("enter system") e o
+> **pedido OBD2** em si (`0x0F` `filter_frame` + `0x16` `send_can_id`).
+>
+> **→ Isso foi implementado na v1.2.6** (além de um painel de experimentos e console HEX bruto).
 
-**Data:** 13/11/2026  
-**Versão testada:** Multcar Pro v1.2.5 (Build 13/11 — Protocolo AD10 Corrigido)  
+**Data:** 14/11/2026  
+**Versão testada:** Multcar Pro v1.2.6 (Build 14/11 — Protocolo AD10 + Requisição OBD2)  
 **Hardware:** XTOOL Advancer AD10 (BLE 4.2) no Chevrolet Prisma LTZ 1.4 2015  
 **Dispositivo:** Central K2401 (Android 10) e/ou Smartphone Android
 
