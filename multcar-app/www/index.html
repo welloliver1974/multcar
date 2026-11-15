@@ -815,7 +815,7 @@
     <div class="brand">
       <h1>🏎️ MULTCAR</h1>
       <span class="badge">Prisma 1.4</span>
-      <span class="badge version-badge" id="appVersionBadge" title="Multcar Pro v1.2.9 — Varredura segura (sem 0x6009) + frame CAN cru no payload">v1.2.9 • 15/11</span>
+      <span class="badge version-badge" id="appVersionBadge" title="Multcar Pro v1.3.5 — envelope 0x6001[01][0F][CAN 10B] em 1a ordem">v1.3.5 • 15/11</span>
     </div>
     <div class="header-actions">
       <div class="status-badge">
@@ -1812,7 +1812,7 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
       const timeStr = now.toTimeString().split(' ')[0] + '.' + String(now.getMilliseconds()).padStart(3, '0');
       const entry = `[${timeStr}] ${msg}`;
       bleLogs.push(entry);
-      if (bleLogs.length > 30) bleLogs.shift();
+      if (bleLogs.length > 120) bleLogs.shift();
       console.log(`[Multcar BLE] ${entry}`);
     }
 
@@ -1873,6 +1873,7 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
 
     let txCount = 0;
     let rxCount = 0;
+    let lastTxFrame = '(nenhum)';
 
     // ======================================================================
     // PROTOCOLO OFICIAL XTOOL AD10 — REVERIFICADO (13/11/2026)
@@ -2384,6 +2385,7 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
         const txCountEl = document.getElementById('telemetryTxCount');
         if (txCountEl) txCountEl.textContent = txCount;
         logBle(`TX ${hexDump(frameBytes)}`);
+        lastTxFrame = hexDump(frameBytes);
 
         if (isNativeBle && currentDeviceId && window.capacitorCommunityBluetoothLe) {
           const BleClient = window.capacitorCommunityBluetoothLe.BleClient;
@@ -2534,21 +2536,29 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
      * Como o cmd exato ainda não foi confirmado, o app varre as combinações.
      */
     /**
-     * ⚠️ `0x6009` NÃO entra na varredura automática: o handler do firmware
-     * repassa o payload cru para o callback do módulo `obd_scan`, e payloads
-     * malformados derrubam/reiniciam o dongle (o BLE desconecta e reconecta
-     * sozinho). Ele só é enviado pelo botão manual "Enviar 0x6009".
+     * ⚠️ `0x6009` FORA da varredura: confirmado empiricamente no carro (15/11) que
+     * ele reinicia o dongle e derruba o BLE. Só via botão manual.
      */
-    const AD10_OBD_CMDS = [0x6001, 0x6104, 0x6002, 0x6003];
+    const AD10_OBD_CMDS = [0x6001];
 
     function buildAd10CanPayloads(canId, mode, pid) {
       const hi = (canId >> 8) & 0xFF, lo = canId & 0xFF;
-      const a = [0x08, hi, lo, 0x02, mode & 0xFF, pid & 0xFF];       // DLC primeiro
+      const a = [0x08, hi, lo, 0x02, mode & 0xFF, pid & 0xFF];       // DLC primeiro (11)
       while (a.length < 11) a.push(0x55);
-      const b = [hi, lo, 0x08, 0x02, mode & 0xFF, pid & 0xFF];       // ID primeiro
+      const b = [hi, lo, 0x08, 0x02, mode & 0xFF, pid & 0xFF];       // ID primeiro (11)
       while (b.length < 11) b.push(0x55);
-      const c = [hi, lo, 0x02, mode & 0xFF, pid & 0xFF];            // mínimo
-      return [a, b, c];
+      const c = [hi, lo, 0x02, mode & 0xFF, pid & 0xFF];            // mínimo (5)
+      // formato [tamanho][frame] usado pela família 0x6004..0x6009
+      const d = [hi, lo, 0x02, mode & 0xFF, pid & 0xFF];            // CAN 10 bytes
+      while (d.length < 10) d.push(0x55);
+      const e = [hi, lo, 0x08, 0x02, mode & 0xFF, pid & 0xFF];      // CAN 10 bytes
+      while (e.length < 10) e.push(0x55);
+      // grupo 0x6003: ble_protocol_reset(0x03) / clear(0x04) / can_scan(0x05)
+      const f = [0x01, 0x05];   // [count, can_scan]
+      const g = [0x05];         // can_scan direto
+      const h = [0x01, 0x04];   // [count, clear]
+      const k = [0x01, 0x03];   // [count, reset]
+      return [d, e, a, b, c, f, g, h, k];
     }
 
     /**
@@ -2556,7 +2566,17 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
      */
     async function sendAd10RawObdRequest(cmd, canId, mode, pid, layout) {
       const payloads = buildAd10CanPayloads(canId, mode, pid);
-      const p = payloads[layout % payloads.length];
+      const raw = payloads[layout % payloads.length];
+      let p = raw;
+      if (cmd === 0x6001) {
+        // envelope oficial: [count=1][sub=0x0F filter_frame][frame CAN de 10 bytes]
+        const frame = raw.length >= 10 ? raw.slice(0, 10) : raw;
+        p = [0x01, 0x0F, ...frame];
+      } else if (cmd === 0x6003) {
+        // 0x6003 é o grupo de protocolo: aceita apenas [count, sub] (nunca frame cru)
+        const safe = raw.length <= 2 ? raw : [0x01, 0x05];
+        p = safe;
+      }
       const n = AD10_OBD_CMDS.length * payloads.length;
       const idx = (AD10_OBD_CMDS.indexOf(cmd) * payloads.length) + (layout % payloads.length);
       logBle(`▸ TENTATIVA ${idx + 1}/${n}: cmd=0x${cmd.toString(16).toUpperCase()} payload=[${hexDump(p)}]`);
@@ -2679,6 +2699,13 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
         await sendAd10ObdCommand([AD10_OBD.CAN_TYPE]);
         await new Promise(r => setTimeout(r, 150));
 
+        // 1b) ble_protocol_can_scan (0x6003 / sub 0x05) — LIGA o scanner CAN.
+        //     O dongle REINICIA ao executar isso (o BLE cai) — então mandamos
+        //     UMA VEZ e ficamos em silêncio para ele subir e começar a enviar 0x600A.
+        logBle('→ Enviando can_scan (0x6003/0x05). O dongle vai reiniciar…');
+        await sendCanFrame(buildAd10Packet(0x6003, [0x01, 0x05]));
+        await new Promise(r => setTimeout(r, 12000));
+
         // 2) Configuração do barramento CAN (0x6001) — igual ao app oficial
         await sendAd10ConfigCommand(buildAd10CanConfigEntries());
         await new Promise(r => setTimeout(r, 250));
@@ -2797,7 +2824,7 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
           try {
             if (currentObdMode === 'AD10') {
               tick++;
-              const payloads = 3;
+              const payloads = 5;
               const total = AD10_OBD_CMDS.length * payloads;
 
               // Reenvia a configuração CAN periodicamente (o dongle pode reiniciar o scanner)
@@ -2846,8 +2873,38 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
       }
     }
 
+    let ad10ReconnectTimer = null;
+    let ad10ReconnectTries = 0;
+
     function onBleDisconnected() {
       console.warn('[BLE] Dispositivo desconectado');
+      logBle(`⟪⟪⟪ BLE DESCONECTOU ⟫⟫⟫ — último quadro TX: ${lastTxFrame}`);
+      // reconecta sozinho (o dongle reinicia ao rodar o can_scan)
+      if (isConnectedBle || ad10ReconnectTimer) { /* nada */ }
+      if (!ad10ReconnectTimer && currentDeviceId) {
+        ad10ReconnectTries = 0;
+        const tryReconnect = async () => {
+          ad10ReconnectTries++;
+          if (ad10ReconnectTries > 6) { ad10ReconnectTimer = null; logBle('✖ Reconexão automática falhou.'); return; }
+          await new Promise(r => setTimeout(r, 3000));
+          try {
+            if (!isConnectedBle && window.capacitorCommunityBluetoothLe) {
+              const BC = window.capacitorCommunityBluetoothLe.BleClient;
+              await BC.connect(currentDeviceId, () => { });
+              await setupBleGattAndListeners(currentDeviceId);
+              isConnectedBle = true;
+              logBle('✔ Reconectado ao AD10.');
+              connDot.className = 'dot connected';
+              connText.textContent = 'AD10 OK';
+              btnConnectBle.textContent = '🔌 Desconectar';
+              btnConnectBle.classList.add('btn-secondary');
+              startPolling();
+              ad10ReconnectTimer = null;
+            }
+          } catch (e) { logBle(`↻ Reconectando… (${ad10ReconnectTries}/6)`); }
+        };
+        ad10ReconnectTimer = setTimeout(tryReconnect, 3000);
+      }
       isConnectedBle = false;
       isNativeBle = false;
       currentDeviceId = null;
