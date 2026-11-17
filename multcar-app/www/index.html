@@ -815,7 +815,7 @@
     <div class="brand">
       <h1>🏎️ MULTCAR</h1>
       <span class="badge">Prisma 1.4</span>
-      <span class="badge version-badge" id="appVersionBadge" title="Multcar Pro v1.3.5 — envelope 0x6001[01][0F][CAN 10B] em 1a ordem">v1.3.7 • 15/11</span>
+      <span class="badge version-badge" id="appVersionBadge" title="Multcar Pro v1.3.5 — envelope 0x6001[01][0F][CAN 10B] em 1a ordem">v1.3.8 • 17/11</span>
     </div>
     <div class="header-actions">
       <div class="status-badge">
@@ -2368,6 +2368,7 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
 
       if (isConnectedBle) {
         if (currentObdMode === 'AD10') {
+          ad10SkipCanScan = false;   // troca manual de modo = nova sessão
           await initAd10Device();
         } else {
           await initElm327Device();
@@ -2686,7 +2687,10 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
         statusEl.style.color = 'var(--yellow)';
       }
 
-      ad10SkipCanScan = false;
+      // ⚠️ NÃO zerar ad10SkipCanScan aqui! Ele é zerado APENAS na conexão manual
+      // (toggleBleConnection). Se zerasse aqui, o auto-reconnect reenviaria o
+      // can_scan em loop — o dongle reiniciaria infinitamente (bug achado nos
+      // prints de 17/11: can_scan em 18:17:01 e de novo em 18:17:40).
       logBle('Iniciando handshake AD10 (protocolo binário oficial 0xAA)...');
       ad10RxState = 0;
       ad10RxFrame = [];
@@ -3075,6 +3079,10 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
         await disconnectBle();
         return;
       }
+
+      // Conexão MANUAL: nova sessão — o can_scan precisa ser enviado de novo.
+      // (O auto-reconnect NÃO passa por aqui, então não zera o flag.)
+      ad10SkipCanScan = false;
 
       connDot.className = 'dot connecting';
       connText.textContent = 'Buscando...';
