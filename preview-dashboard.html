@@ -815,7 +815,7 @@
     <div class="brand">
       <h1>🏎️ MULTCAR</h1>
       <span class="badge">Prisma 1.4</span>
-      <span class="badge version-badge" id="appVersionBadge" title="Multcar Pro v1.3.5 — envelope 0x6001[01][0F][CAN 10B] em 1a ordem">v1.3.9 • 18/11</span>
+      <span class="badge version-badge" id="appVersionBadge" title="Multcar Pro v1.4.0 — filtros oficiais + enter system + exportar log">v1.4.0 • 18/11</span>
     </div>
     <div class="header-actions">
       <div class="status-badge">
@@ -3000,7 +3000,7 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
       const can = document.getElementById('telemetryCanStatus')?.textContent || '--';
       const recentLogs = bleLogs.slice(-10).join('<br>');
       const msg = `
-        <strong>Versão do App:</strong> v1.3.9 (Build 18/11 — filtros oficiais + enter system por ECU)<br>
+        <strong>Versão do App:</strong> v1.4.0 (Build 18/11 — filtros oficiais + enter system + exportar log)<br>
         <strong>Modo OBD Ativo:</strong> ${currentObdMode === 'AD10' ? '⚡ AD10 Nativo (binário 0xAA, cmd BIG-ENDIAN)' : '🔌 ELM327 Universal (AT ASCII)'}<br>
         <strong>Dispositivo:</strong> ${dev}<br>
         <strong>CAN Status:</strong> ${can}<br>
