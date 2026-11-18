@@ -71,3 +71,10 @@ falha se o app voltar a enviar o comando em little-endian.
 | Construtor de quadro (app oficial) | `libobdcore.so` `0x18040` |
 | `set_cmd` (app oficial) | `libobdcore.so` `0x1a4c4` |
 | `InitHardware` (app oficial) | `libobdcore.so` `0x15d20` |
+| `nativeEnterSystem` (enter system por ECU) | `libobdcore.so` `0xda24` |
+| `nativeSendReceive` (polling TX/RX) | `libobdcore.so` `0x10cc0` |
+| `nativeGetValueByPid` (monta request PID) | `libobdcore.so` `0xeb2c` |
+| `nativeGetEcuList` / `nativeGetProtocol` | `libobdcore.so` `0xdaec` / `0x1106c` |
+| `nativeIsCanStd` / `nativeIsCanExt` | `libobdcore.so` `0x11114` / `0x11188` |
+| App oficial é Cordova/Vue (UI em `assets/www/static/js`) | comandos abstratos `ObdMessage({func:"CmdToObd",data:...})` — bytes montados no `.so` |
+| String de config oficial | `CAN,std,0,pin:6+14,07df/07e0/07f0,period:0/2/200/80/1000` |
