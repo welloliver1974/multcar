@@ -110,6 +110,8 @@ Ambos foram corrigidos e **validados no firmware `ble_obd.bin` e no app oficial 
 
 ## 4. Próximo Passo do Usuário no Veículo (v1.3.7)
 
+> **📸 RESULTADO DOS TESTES DE 17-18/11 (v1.3.8):** o fix do loop funcionou — o app avança até a requisição de RPM (prints 07:19), mas a ECU ainda não devolve frame CAN (`0x600A`). O próximo passo é testar os botões do painel de experimentos. ⚠️ **Não repetir o erro da bateria: máximo 5 min de ignição II.**
+
 > **🔋 PRÉ-REQUISITO: BATERIA DO CARRO CARREGADA.**
 > Em 15/11 a bateria descarregou (ignição ligada ~2 h durante os testes). Para resolver sem gastar
 > gasolina: **2ª marcha + empurrar para pegar no embalo** (solte a embreagem rápido) **ou** chupeta

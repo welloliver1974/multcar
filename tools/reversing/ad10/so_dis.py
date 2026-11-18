@@ -4,7 +4,7 @@ import os
 _ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 FW = os.path.join(_ROOT, 'unpacked_apk', 'lib', 'arm64-v8a', 'libobdcore.so')
 
-d=open(PATH,'rb').read()
+d=open(FW,'rb').read()
 e_shoff=struct.unpack_from('<Q',d,0x28)[0]; e_shentsize=struct.unpack_from('<H',d,0x3a)[0]
 e_shnum=struct.unpack_from('<H',d,0x3c)[0]; e_shstrndx=struct.unpack_from('<H',d,0x3e)[0]
 secs=[]
