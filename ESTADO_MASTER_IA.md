@@ -108,9 +108,29 @@ Chutar protocolo/filtro/layout **não resolve** — por isso v1.3.9, v1.4.0 e v1
 
 ## 4. 🎯 O QUE FALTA (o próximo passo exato)
 
-### A única tarefa pendente: CAPTURA HCI do app oficial
+### 🔥 DESCOBERTA EM 18/11: os logs do app oficial JÁ EXISTEM no celular!
 
-Roteiro detalhado em **`CAPTURA_HCI_ROTEIRO.md`** (3 fases, minimiza tempo no carro):
+O `logcat_full.log` (15/11, 36 MB) prova que o app oficial **gravou 8–9 arquivos de log**
+e o upload **falhou por certificado** — então os arquivos **ainda estão no celular**:
+
+```
+11-15 11:44:37 D LogSpecial: upload log file start service,file count=8
+11-15 11:46:17 W LogSpecial: at LogSpecial.endRecordLogCmd(LogSpecial.java:359)
+11-15 11:44:38 I LogSpecial: upload log file error: CertPathValidatorException
+11-15 11:47:37 D LogSpecial: upload log file start service,file count=9
+```
+
+Caminhos extraídos do dex: **`/BLELogs/`**, `/DbgLogs/`, `/LogSpecial/`, `AD10Log.zip`, `AD10debug.txt`.
+O app estava lendo a ECU com sucesso (`CmdToObd` → run_avgfuel, coolant, battery) quando gravou.
+
+➡️ **NOVO PLANO (sem ir ao carro):**
+1. Conectar celular no **USB do PC** e me falar **"puxar logs"**.
+2. Eu rodo `tools\reversing\ad10\puxar_logs_app_oficial.ps1` → traz os `/BLELogs/` pra `scratch/capture/app_oficial_logs/`.
+3. Extraio os bytes BLE exatos (escritas ATT) → comparo com o nosso log → patch 1:1 → rebuild → teste final (5 min, chave II).
+
+### 📋 Plano alternativo (se os logs não estiverem mais no celular)
+
+Roteiro em **`CAPTURA_HCI_ROTEIRO.md`** (3 fases, minimiza tempo no carro):
 
 | Fase | Onde | Ação | Tempo |
 |---|---|---|---|
@@ -118,15 +138,15 @@ Roteiro detalhado em **`CAPTURA_HCI_ROTEIRO.md`** (3 fases, minimiza tempo no ca
 | **B** | No carro | AD10 no OBD2, chave II (motor DESLIGADO), abrir **app oficial XTOOL**, deixar ler ~15 s, desligar | ~1 min |
 | **C** | Em casa, PC | Conectar USB → rodar `tools\reversing\ad10\capturar_oficial.ps1` → extrai `.btsnoop` do bugreport e decodifica com `decode_btsnoop.py` | 3 min |
 
-**Depois da Fase C:** comparar o `decoded_*.txt` (bytes exatos do oficial) com o nosso log
+**Depois:** comparar o `decoded_*.txt` (bytes exatos do oficial) com o nosso log
 → identificar o payload/sequência corretos → aplicar patch 1:1 no `multcar-app/www/index.html`
 → rebuild → **1 teste final no carro (5 min, chave II)**.
 
-### ⚠️ Notas críticas sobre a captura
+### ⚠️ Notas críticas
 
-- **O usuário JÁ tentou capturar antes** e acha que "deve ter na doc" — mas **não sobrou nenhum
-  `.btsnoop` salvo** em `scratch/capture/` (só logs de logcat: `live.log`, `live2.log`).
-  Verifiquei. Se o usuário tiver o arquivo/print em outro lugar, usar.
+- **Não sobrou `.btsnoop` salvo** em `scratch/capture/` (só logs de logcat: `live.log`,
+  `live2.log`, `logcat_full.log` e zips `br1/br2/br_final.zip` — estes últimos **não contêm**
+  o snoop, bloqueado pelo Android 17 da Samsung).
 - Se o HCI snoop não ativar via `adb shell` (Android 12+ sem root), ativar manualmente:
   Configurações → Opções do desenvolvedor → **"Ativar registro de log HCI de Bluetooth"**.
 - **NUNCA** deixar ignição ligada por muito tempo — bateria já descarregou uma vez.
