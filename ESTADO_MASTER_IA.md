@@ -1,11 +1,10 @@
 # 📋 ESTADO-MASTER DO PROJETO MULTCAR PRO — Para qualquer IA continuar daqui
 
-> **Última atualização:** 18/nov/2026 · **Versão atual do código:** v1.4.1 (badge `v1.4.1 • 18/11`)
-> **Último commit:** `9f2d4de` · **Branch:** `main` (⚠️ estava `ahead 7` do origin — FAZER PUSH)
+> **Última atualização:** 18/nov/2026 · **Versão atual do código:** v1.5.0 (badge `v1.5.0 • 18/11`)
+> **Último commit:** `ed0a13c` · **Branch:** `main` sincronizado com origin ✅
 >
-> **LEIA ESTE DOCUMENTO INTEIRO ANTES DE MEXER EM QUALQUER COISA.**
-> Ele é a fonte da verdade sobre o que já foi feito, o que já foi provado, o que NÃO foi,
-> e exatamente onde paramos. Outros `.md` estão parciais/desatualizados — este consolida todos.
+> **🔥 LEIA A SEÇÃO 3.3 PRIMEIRO** — achamos o `blecmd.log` do app oficial e o protocolo
+> exato foi replicado. Falta só o teste final no carro.
 
 ---
 
@@ -82,27 +81,42 @@ polling: 0x6001 [01][0F][frame CAN 10B]  +  0x6001 [01][16][CAN ID]
 
 ---
 
-## 3. ❌ O QUE NÃO FUNCIONA (o problema atual — o único que falta)
+## 3. ❌ O QUE NÃO FUNCIONA (RESOLVIDO em 18/11 — veja §3.3)
 
-### 3.1. Sintoma (confirmado em 4 testes de campo: v1.3.9, v1.4.0, v1.4.1 — logs 17–18/11)
+### 3.1. Sintoma (4 testes: v1.3.9, v1.4.0, v1.4.1)
+Só ACK `0x600B`, nunca `0x600A`. Handshake OK, ECU muda.
 
-- O dongle **aceita tudo**: toda resposta é ACK `cmd=0x600B payload=[60 01 01]`.
-- **NUNCA aparece `cmd=0x600A`** (frame CAN da ECU).
-- Em ~5 min de polling contínuo (250+ quadros), **100% dos RX são ACK** — nenhum dado da ECU.
-- Handshake perfeito (V01.20, tensão ~14,8 V com motor ligado, status=133 valor=1).
+### 3.2. Causa (antiga, agora entendida)
+Estávamos mandando o **comando errado**: `0x6001 [01][0F][frame]` pra pedir PID.
+O app oficial usa **`0x6009`**. Chutar protocolo/filtro não resolvia.
 
-### 3.2. Causa raiz (entendida por RE estática, 18/11)
+### 3.3. ✅ DESCOBERTA DECISIVA (18/11) — `blecmd.log` do app oficial
 
-Desassemblamos `nativeSendReceive @ 0x10cc0`, `nativeGetValueByPid @ 0xeb2c`,
-`nativeEnterSystem @ 0xda24`, `set_cmd @ 0x1a4c4`, e os handlers do firmware `0x6001..0x6009`.
+**Achado em `C:\Users\welld\AppData\Local\Temp\blecmd.log`** (1,1 MB, gravado pelo próprio
+app oficial XTOOL em **15/11**, loga `sendDataJNI:` = TX e `read:` = RX com todos os bytes).
+Cópia salva em `scratch/capture/blecmd_oficial.log`. **3925 respostas `0x600A` reais** = o carro
+respondendo (RPM `41 0C 00 00`, VIN, coolant, battery etc).
 
-**Conclusão:** os bytes que o app oficial envia **não são constantes**. O `0x6009`/`0x6001`
-que replicamos é só a "casca". O **conteúdo real do frame CAN** é montado dinamicamente a partir
-de uma **tabela de dados de ECU de ~3,4 MB** (`unpacked_apk/assets/obddata/*.BIN`).
-Chutar protocolo/filtro/layout **não resolve** — por isso v1.3.9, v1.4.0 e v1.4.1 falharam.
+**O protocolo EXATO do app oficial (replicado na v1.5.0):**
 
-> ⚠️ **NÃO perca mais tempo com RE estática nem com chutes de protocolo.** Isso já foi
-> esgotado. A única saída é capturar os bytes reais do app oficial em funcionamento.
+1. **Config (1x):** `AA seq 28 60 01 0C 0E 00 13 00 02 00 07 A1 20 10 02 11 02
+   12 00 00 07 E0 00 00 00 0F 01 00 06 00 00 05 00 02 04 00 C8 03 00 50 07 00 chk`
+   → 12 sub-comandos: protocolo **`0x00`**, filtros **`0x07E0` + `0x000F`**,
+   frame2frame=`0x00C8` (200), bye2bye=`0x0050` (80).
+2. **Pedido de cada PID (centenas de vezes):** `AA seq 0D 60 09 0B 08 07 DF 02 01 <PID> 00 00 00 00 00 chk`
+   → **cmd `0x6009`**, payload `[0B][08][07 DF][02][01][PID][00×5]`. O `0B`=tamanho, `08`=DLC,
+   `07 DF`=CAN ID broadcast, `02`=len ISO-TP, `01`=modo 1, PID (0x00,0x0C,0x20,0x40,0x60...).
+3. **Resposta:** `0x600A payload=[0B][08][07 E8][len][41][PID][A][B][C][D]...`
+   → `41`=modo 1 resposta; `41 0C A B` = RPM `((A*256)+B)/4` (774 respostas reais no log).
+4. **NUNCA manda `0x6003` (can_scan)** — removido do handshake.
+
+**Implementado na v1.5.0:** `sendAd10ObdRequestOficial(pid)`, config de 12 subs copiada
+byte a byte, can_scan removido, decoder `0x600A` validado contra os bytes reais.
+➡️ **Falta só o teste final no carro** (5 min, chave II). Se aparecer `🛰️ Frame CAN ID 0x07E8`
+e `📊 Resposta OBD2 PID=0x0C` → **FECHAR O APP**.
+
+> Outros logs uteis em `/Temp/`: `debug20261115114222.log`, `debug20261115114617.log`
+> (e `debug*.log` de 01 e 07/11) — outro material do app oficial, nao analisado a fundo.
 
 ---
 
