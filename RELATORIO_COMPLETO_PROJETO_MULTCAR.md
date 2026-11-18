@@ -522,6 +522,23 @@ Para facilitar a manutenção contínua e eliminar comandos longos no terminal d
 
 ## 14. Histórico de Versões e Builds
 
+- **v1.5.0 (Build 18/11/2026) — 🏆 PROTOCOLO EXATO DESCOBERTO via `blecmd.log` do app oficial:**
+  - **Achado decisivo:** o arquivo `C:\Users\welld\AppData\Local\Temp\blecmd.log` (1,1 MB),
+    gravado pelo **próprio app oficial XTOOL em 15/11**, continha **3925 respostas `0x600A`**
+    reais do carro (RPM, VIN, coolant, battery). O app tentou fazer upload e falhou por
+    certificado → os logs ficaram no celular e foram resgatados. Cópia: `scratch/capture/blecmd_oficial.log`.
+  - **O erro de sempre revelado:** estávamos pedindo PID com `0x6001 [01][0F][frame]`.
+    O app oficial usa **`0x6009 0B 08 07 DF 02 01 <PID> 00×5`** (3827x no log).
+  - **Config exata copiada byte a byte:** 12 sub-comandos, protocolo **`0x00`**,
+    filtros `0x07E0`/`0x000F`, frame2frame `0x00C8`, bye2bye `0x0050`.
+  - **App oficial NUNCA envia `can_scan` (`0x6003`)** — removido do handshake.
+  - decoder `0x600A` validado: `41 0C A B` → RPM `((A*256)+B)/4` (774 respostas reais).
+  - ⏳ **Falta só o teste final no carro** (5 min, chave II). Detalhes:
+    `PROTOCOLO_OFICIAL_BLECMD_LOG.md`.
+- **v1.4.1 (18/11):** protocolo `0x07` no sweep (do init do app oficial). Não resolveu.
+- **v1.4.0 (18/11):** exportar log completo (Copiar / Salvar .txt — Filesystem+Share).
+- **v1.3.9 (18/11):** filtros CAN oficiais `07DF/07E0/07F0` + enter system por ECU.
+
 - **v1.3.7 (Build 15/11/2026) — ⭐ CAN_SCAN DESCOBERTO + envelope oficial + reconexão automática:**
   - **Diagnóstico ao vivo (adb + logcat no celular):** descobriu-se o mecanismo real do dongle.
   - **`0x6003 / sub 0x05` = `ble_protocol_can_scan`** → o dongle **ACEITA** (ACK `0x600B` com status `0x01`)

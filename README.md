@@ -11,7 +11,7 @@
 
 ## 🌟 Destaques do Projeto
 
-* **Engenharia Reversa do XTOOL AD10:** Decodificação completa do protocolo proprietário Nordic UART Service (`6E400001-B5A3-F393-E0A9-E50E24DCCA9E`) e frames CAN 11-bit a 500 kbps, superando a incompatibilidade do dongle com aplicativos genéricos ELM327.
+* **Engenharia Reversa do XTOOL AD10:** Decodificação completa do protocolo proprietário Nordic UART Service (`6E400001-B5A3-F393-E0A9-E50E24DCCA9E`) e frames CAN 11-bit a 500 kbps, superando a incompatibilidade do dongle com aplicativos genéricos ELM327. O pedido OBD2 usa o comando **`0x6009`** do app oficial (descoberto via `blecmd.log` em 18/11 — ver `PROTOCOLO_OFICIAL_BLECMD_LOG.md`).
 * **Auto-Conexão Inteligente:** Idêntica ao aplicativo oficial da XTOOL — varre em segundo plano e conecta automaticamente sem abrir caixas de diálogo ou exigir seleção manual de aparelhos.
 * **Computador de Bordo Dinâmico:**
   * Consumo instantâneo inteligente baseado na física *Speed-Density* para o motor SPE/4 GM (`L/h` em marcha lenta / `km/L` em estrada).
