@@ -1812,8 +1812,45 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
       const timeStr = now.toTimeString().split(' ')[0] + '.' + String(now.getMilliseconds()).padStart(3, '0');
       const entry = `[${timeStr}] ${msg}`;
       bleLogs.push(entry);
-      if (bleLogs.length > 120) bleLogs.shift();
+      if (bleLogs.length > 2000) bleLogs.shift();
       console.log(`[Multcar BLE] ${entry}`);
+    }
+
+    // === EXPORTAR LOG COMPLETO (sem print de tela) ===
+    async function copyBleLog() {
+      const texto = bleLogs.join('\n');
+      try {
+        await navigator.clipboard.writeText(texto);
+        showToast('✅ Log copiado', `${bleLogs.length} linhas na área de transferência. Cole no WhatsApp.`, 'success', 4000);
+      } catch (e) {
+        // fallback: textarea + execCommand (funciona em WebView antiga)
+        const ta = document.createElement('textarea');
+        ta.value = texto; ta.style.position = 'fixed'; ta.style.opacity = '0';
+        document.body.appendChild(ta); ta.select();
+        try { document.execCommand('copy'); showToast('✅ Log copiado', `${bleLogs.length} linhas.`, 'success', 4000); }
+        catch (err) { showToast('⚠️ Falha ao copiar', 'Use o botão 💾 Salvar log.', 'warning', 4000); }
+        document.body.removeChild(ta);
+      }
+    }
+
+    async function shareBleLog() {
+      const texto = bleLogs.join('\n');
+      const nome = `multcar_log_${new Date().toISOString().replace(/[:.]/g, '-')}.txt`;
+      try {
+        const cap = window.Capacitor || {};
+        const Fs = (cap.Plugins && cap.Plugins.Filesystem) || (window.capacitorFs);
+        const Share = (cap.Plugins && cap.Plugins.Share) || (window.capacitorShare);
+        if (Fs && Share) {
+          const r = await Fs.writeFile({ path: nome, data: texto, directory: 'CACHE' });
+          await Share.share({ title: 'Multcar — Log BLE', text: 'Log de diagnóstico AD10', files: [r.uri], dialogTitle: 'Compartilhar log' });
+          showToast('✅ Log salvo', `${bleLogs.length} linhas. Escolha o WhatsApp no menu de compartilhamento.`, 'success', 5000);
+        } else {
+          // fallback: copia e avisa
+          await copyBleLog();
+        }
+      } catch (e) {
+        showToast('⚠️ Falha ao salvar', `${e.message || e}. Tente Copiar.`, 'warning', 5000);
+      }
     }
 
     let writeCharacteristics = [];
@@ -2963,7 +3000,7 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
       const can = document.getElementById('telemetryCanStatus')?.textContent || '--';
       const recentLogs = bleLogs.slice(-10).join('<br>');
       const msg = `
-        <strong>Versão do App:</strong> v1.2.6 (Build 14/11 — Protocolo AD10 + Requisição OBD)<br>
+        <strong>Versão do App:</strong> v1.3.9 (Build 18/11 — filtros oficiais + enter system por ECU)<br>
         <strong>Modo OBD Ativo:</strong> ${currentObdMode === 'AD10' ? '⚡ AD10 Nativo (binário 0xAA, cmd BIG-ENDIAN)' : '🔌 ELM327 Universal (AT ASCII)'}<br>
         <strong>Dispositivo:</strong> ${dev}<br>
         <strong>CAN Status:</strong> ${can}<br>
@@ -2981,7 +3018,10 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
         <button class="btn btn-secondary" onclick="toggleObdMode();" style="width:100%; margin-bottom:6px;">🔄 Alternar para ${currentObdMode === 'AD10' ? 'ELM327 Universal' : 'AD10 Nativo'}</button>
         <input id="ad10RawHex" placeholder="HEX bruto p/ enviar (ex: AA 00 03 60 02 01 82 E2)" style="width:100%; margin:6px 0; padding:8px; border-radius:6px; border:1px solid #334155; background:#0f172a; color:#e2e8f0; font-family:monospace;">
         <button class="btn btn-secondary" onclick="ad10Exp('raw');" style="width:100%; margin-bottom:10px;">📤 Enviar HEX bruto</button><br>
-        <strong>Histórico Recente BLE:</strong><br><small style="font-family: monospace;">${recentLogs || 'Nenhum evento registrado'}</small>
+        <strong>📄 Log Completo (${bleLogs.length} linhas):</strong><br>
+        <button class="btn btn-secondary" onclick="copyBleLog()" style="width:100%; margin-bottom:6px;">📋 Copiar log inteiro (colar no WhatsApp)</button>
+        <button class="btn btn-secondary" onclick="shareBleLog()" style="width:100%; margin-bottom:10px;">💾 Salvar e compartilhar log (.txt)</button>
+        <strong>Histórico Recente BLE (últimas 10):</strong><br><small style="font-family: monospace;">${recentLogs || 'Nenhum evento registrado'}</small>
       `;
       showToast('📊 Diagnóstico BLE', msg, 'info', 20000);
     }
