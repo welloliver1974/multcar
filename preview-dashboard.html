@@ -815,7 +815,7 @@
     <div class="brand">
       <h1>🏎️ MULTCAR</h1>
       <span class="badge">Prisma 1.4</span>
-      <span class="badge version-badge" id="appVersionBadge" title="Multcar Pro v1.4.0 — filtros oficiais + enter system + exportar log">v1.4.0 • 18/11</span>
+      <span class="badge version-badge" id="appVersionBadge" title="Multcar Pro v1.4.1 — protocolo 0x07 (init do app oficial) + exportar log">v1.4.1 • 18/11</span>
     </div>
     <div class="header-actions">
       <div class="status-badge">
@@ -2633,6 +2633,10 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
      * conectar — cada tentativa é registrada no log com um marcador claro.
      */
     const AD10_SWEEP = [
+      { desc: 'enter[07E0] + proto 7 + layout A',     enter: [0x02, 0x07, 0xE0],        proto: 0x07, layout: 0 },
+      { desc: 'enter[07DF] + proto 7 + layout A',     enter: [0x02, 0x07, 0xDF],        proto: 0x07, layout: 0 },
+      { desc: 'enter[07E0] + proto 7 + layout B',     enter: [0x02, 0x07, 0xE0],        proto: 0x07, layout: 1 },
+      { desc: 'enter[00] + proto 7 + layout A',       enter: [0x00],                    proto: 0x07, layout: 0 },
       { desc: 'enter[07E0] + proto 1 + layout A',     enter: [0x02, 0x07, 0xE0],        proto: 0x01, layout: 0 },
       { desc: 'enter[07DF] + proto 1 + layout A',     enter: [0x02, 0x07, 0xDF],        proto: 0x01, layout: 0 },
       { desc: 'enter[07F0] + proto 1 + layout A',     enter: [0x02, 0x07, 0xF0],        proto: 0x01, layout: 0 },
@@ -3000,7 +3004,7 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
       const can = document.getElementById('telemetryCanStatus')?.textContent || '--';
       const recentLogs = bleLogs.slice(-10).join('<br>');
       const msg = `
-        <strong>Versão do App:</strong> v1.4.0 (Build 18/11 — filtros oficiais + enter system + exportar log)<br>
+        <strong>Versão do App:</strong> v1.4.1 (Build 18/11 — protocolo 0x07 + exportar log)<br>
         <strong>Modo OBD Ativo:</strong> ${currentObdMode === 'AD10' ? '⚡ AD10 Nativo (binário 0xAA, cmd BIG-ENDIAN)' : '🔌 ELM327 Universal (AT ASCII)'}<br>
         <strong>Dispositivo:</strong> ${dev}<br>
         <strong>CAN Status:</strong> ${can}<br>
