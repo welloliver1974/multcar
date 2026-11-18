@@ -815,7 +815,7 @@
     <div class="brand">
       <h1>🏎️ MULTCAR</h1>
       <span class="badge">Prisma 1.4</span>
-      <span class="badge version-badge" id="appVersionBadge" title="Multcar Pro v1.3.5 — envelope 0x6001[01][0F][CAN 10B] em 1a ordem">v1.3.7 • 15/11</span>
+      <span class="badge version-badge" id="appVersionBadge" title="Multcar Pro v1.3.5 — envelope 0x6001[01][0F][CAN 10B] em 1a ordem">v1.3.9 • 18/11</span>
     </div>
     <div class="header-actions">
       <div class="status-badge">
@@ -2368,6 +2368,7 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
 
       if (isConnectedBle) {
         if (currentObdMode === 'AD10') {
+          ad10SkipCanScan = false;   // troca manual de modo = nova sessão
           await initAd10Device();
         } else {
           await initElm327Device();
@@ -2474,7 +2475,7 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
         protocol: 0x01,        // ISO15765-4 STD 500K
         bps: [0x00, 0x07, 0xA1, 0x20],   // 500.000
         filterType: 0x02,
-        filterIds: [[0x00, 0x00, 0x07, 0xE0], [0x00, 0x00, 0x07, 0xE8]],
+        filterIds: [[0x00, 0x00, 0x07, 0xDF], [0x00, 0x00, 0x07, 0xE0], [0x00, 0x00, 0x07, 0xF0]], // filtros oficiais (app XTOOL)
         requestBye: [0x00, 0x00],
         over2Start: [0x00, 0x02],
         frame2Frame: [0x00, 0x00],
@@ -2595,13 +2596,13 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
      * conectar — cada tentativa é registrada no log com um marcador claro.
      */
     const AD10_SWEEP = [
-      { desc: 'enter[00] + proto 1 + layout A',        enter: [0x00],                    proto: 0x01, layout: 0 },
-      { desc: 'enter[01] + proto 1 + layout A',        enter: [0x01],                    proto: 0x01, layout: 0 },
-      { desc: 'enter[len+id] + proto 1 + layout A',   enter: [0x02, 0x07, 0xDF],        proto: 0x01, layout: 0 },
-      { desc: 'enter[00] + proto 1 + layout B',        enter: [0x00],                    proto: 0x01, layout: 1 },
-      { desc: 'enter[00] + proto 6 + layout A',        enter: [0x00],                    proto: 0x06, layout: 0 },
-      { desc: 'enter[01,00] + proto 1 + layout A',     enter: [0x01, 0x00],             proto: 0x01, layout: 0 },
-      { desc: 'enter[01] + proto 6 + layout B',        enter: [0x01],                    proto: 0x06, layout: 1 }
+      { desc: 'enter[07E0] + proto 1 + layout A',     enter: [0x02, 0x07, 0xE0],        proto: 0x01, layout: 0 },
+      { desc: 'enter[07DF] + proto 1 + layout A',     enter: [0x02, 0x07, 0xDF],        proto: 0x01, layout: 0 },
+      { desc: 'enter[07F0] + proto 1 + layout A',     enter: [0x02, 0x07, 0xF0],        proto: 0x01, layout: 0 },
+      { desc: 'enter[07E8] + proto 1 + layout A',     enter: [0x02, 0x07, 0xE8],        proto: 0x01, layout: 0 },
+      { desc: 'enter[07E0] + proto 1 + layout B',     enter: [0x02, 0x07, 0xE0],        proto: 0x01, layout: 1 },
+      { desc: 'enter[07E0] + proto 6 + layout A',     enter: [0x02, 0x07, 0xE0],        proto: 0x06, layout: 0 },
+      { desc: 'enter[00] + proto 1 + layout A',       enter: [0x00],                    proto: 0x01, layout: 0 }
     ];
 
     let ad10SweepIndex = 0;
@@ -2686,7 +2687,10 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
         statusEl.style.color = 'var(--yellow)';
       }
 
-      ad10SkipCanScan = false;
+      // ⚠️ NÃO zerar ad10SkipCanScan aqui! Ele é zerado APENAS na conexão manual
+      // (toggleBleConnection). Se zerasse aqui, o auto-reconnect reenviaria o
+      // can_scan em loop — o dongle reiniciaria infinitamente (bug achado nos
+      // prints de 17/11: can_scan em 18:17:01 e de novo em 18:17:40).
       logBle('Iniciando handshake AD10 (protocolo binário oficial 0xAA)...');
       ad10RxState = 0;
       ad10RxFrame = [];
@@ -3075,6 +3079,10 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
         await disconnectBle();
         return;
       }
+
+      // Conexão MANUAL: nova sessão — o can_scan precisa ser enviado de novo.
+      // (O auto-reconnect NÃO passa por aqui, então não zera o flag.)
+      ad10SkipCanScan = false;
 
       connDot.className = 'dot connecting';
       connText.textContent = 'Buscando...';
