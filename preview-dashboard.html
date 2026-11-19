@@ -3347,8 +3347,11 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
       }
       showToast('🔍 Varredura DTC', 'Consultando códigos de falha na ECU do motor...', 'info', 2000);
       if (currentObdMode === 'AD10') {
-        const canDtc = [0x01, 0x80, 0xDF, 0x07, 0x00, 0x00, 0x01, 0x03, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55];
-        await sendCanFrame(buildAd10Packet(0x6002, canDtc));
+        // ⭐ MODO 03 (ler DTCs) — replica exata do app oficial (blecmd.log):
+        //    AA seq 0D 60 09 0B 08 07 DF 01 03 00 00 00 00 00 00 chk
+        //    (antes usavamos 0x6002 com payload errado -> nunca funcionava)
+        const dtcPayload = [0x0B, 0x08, 0x07, 0xDF, 0x01, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
+        await sendCanFrame(buildAd10Packet(0x6009, dtcPayload));
       } else {
         const enc = new TextEncoder();
         await sendCanFrame(enc.encode("03\r"));
@@ -3361,8 +3364,9 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
       if (isConnectedBle) {
         showToast('🧹 Limpeza DTC', 'Enviando comando para apagar falhas e luz de injeção...', 'warning', 3000);
         if (currentObdMode === 'AD10') {
-          const canClear = [0x01, 0x80, 0xDF, 0x07, 0x00, 0x00, 0x01, 0x04, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55];
-          await sendCanFrame(buildAd10Packet(0x6002, canClear));
+          // MODO 04 (apagar DTCs) — mesma via oficial 0x6009
+          const canClear = [0x0B, 0x08, 0x07, 0xDF, 0x01, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
+          await sendCanFrame(buildAd10Packet(0x6009, canClear));
         } else {
           const enc = new TextEncoder();
           await sendCanFrame(enc.encode("04\r"));
