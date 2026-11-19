@@ -815,7 +815,7 @@
     <div class="brand">
       <h1>🏎️ MULTCAR</h1>
       <span class="badge">Prisma 1.4</span>
-      <span class="badge version-badge" id="appVersionBadge" title="Multcar Pro v1.5.0 — replica EXATA do app oficial (0x6009, blecmd.log 15/11)">v1.5.0 • 18/11</span>
+      <span class="badge version-badge" id="appVersionBadge" title="Multcar Pro v1.6.0 — 26 PIDs + painel de dados estendidos">v1.6.0 • 18/11</span>
     </div>
     <div class="header-actions">
       <div class="status-badge">
@@ -2037,7 +2037,21 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
     /**
      * Atualiza os mostradores e computador de bordo com a resposta do sensor
      */
-    function handleObdPidResponse(pid, a, b) {
+    // grava dados estendidos num painel flutuante (cria se nao existir)
+    function setExtended(pidKey, label, value) {
+      let box = document.getElementById('extendedDataBox');
+      if (!box) {
+        box = document.createElement('div');
+        box.id = 'extendedDataBox';
+        box.style.cssText = 'position:fixed;bottom:8px;left:8px;z-index:9999;background:rgba(8,15,30,.88);border:1px solid #334155;border-radius:8px;padding:6px 10px;font:11px monospace;color:#93c5fd;max-width:260px;line-height:1.5;pointer-events:none;';
+        document.body.appendChild(box);
+      }
+      let row = document.getElementById('ext_' + pidKey);
+      if (!row) { row = document.createElement('div'); row.id = 'ext_' + pidKey; box.appendChild(row); }
+      row.textContent = label + ': ' + value;
+    }
+
+    function handleObdPidResponse(pid, a, b, c, d) {
       switch (pid) {
         case 0x0C: { // RPM: ((A * 256) + B) / 4
           const rpm = Math.round(((a * 256) + b) / 4);
@@ -2095,6 +2109,34 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
           drawO2Waveform(o2v);
           break;
         }
+        // ===== PIDs ESTENDIDOS (painel flutuante + log) =====
+        case 0x01: setExtended('01','Monitoramento', 'OK='+a+' '+((b&0x80)?'MilhaJon':'')+' '+((b&0x40)?'Catalisador':'')); break;
+        case 0x02: setExtended('02','DTC congelados', a); break;
+        case 0x03: setExtended('03','Status MIL', a); break;
+        case 0x06: setExtended('06','Correção combustível', ((a*100/128)-100).toFixed(1)+'%'); break;
+        case 0x0E: setExtended('0E','Avanço ignição', ((a/2)-64).toFixed(1)+'°'); break;
+        case 0x0F: setExtended('0F','MAF', (a*0.01).toFixed(2)+' g/s'); break;
+        case 0x10: setExtended('10','MAF (alternativo)', ((a*256+b)/100).toFixed(2)+' g/s'); break;
+        case 0x13: setExtended('13','Sonda Lambda 1', ((a*100/128)-100).toFixed(1)+'% / '+a); break;
+        case 0x15: setExtended('15','Sonda Lambda 2', a/200+' V'); break;
+        case 0x1C: setExtended('1C','Padrão OBD', a.toString(16)); break;
+        case 0x1F: setExtended('1F','Tempo desde partida', a+' s'); break;
+        case 0x2E: setExtended('2E','Nível combustível', Math.round(a*100/255)+'%'); break;
+        case 0x2F: setExtended('2F','Purga evaporativa', Math.round(a*100/255)+'%'); break;
+        case 0x30: setExtended('30','Tensão do sistema', (a*256+b)/1000+' V'); break;
+        case 0x31: setExtended('31','Avanço máximo', ((a/2)-64).toFixed(1)+'°'); break;
+        case 0x32: setExtended('32','EGR', Math.round(a*100/255)+'%'); break;
+        case 0x33: setExtended('33','Pressão absoluta', a+' kPa'); break;
+        case 0x43: setExtended('43','Carga reference', Math.round(a*100/255)+'%'); break;
+        case 0x44: setExtended('44','Comando EGR', Math.round(a*100/255)+'%'); break;
+        case 0x45: setExtended('45','Erro EGR', ((a-128)*100/128).toFixed(1)+'%'); break;
+        case 0x46: setExtended('46','Temperatura ambiente', (a-40)+' °C'); break;
+        case 0x47: setExtended('47','Temp. compartimento', (a-40)+' °C'); break;
+        case 0x4A: setExtended('4A','Controle de marcha', Math.round(a*100/255)+'%'); break;
+        case 0x4C: setExtended('4C','Tempo com MIL', a+' s'); break;
+        default:
+          setExtended(pid.toString(16).padStart(2,'0'), 'PID 0x'+pid.toString(16).toUpperCase(),
+                      'A='+a+' B='+b+' C='+c+' D='+d);
       }
     }
 
@@ -2305,8 +2347,10 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
         const pid = payload[idx + 1] ?? 0;
         const a = payload[idx + 2] ?? 0;
         const b = payload[idx + 3] ?? 0;
-        logBle(`📊 Resposta OBD2: modo=41 PID=0x${pid.toString(16).toUpperCase().padStart(2, '0')} A=0x${a.toString(16).toUpperCase().padStart(2, '0')} B=0x${b.toString(16).toUpperCase().padStart(2, '0')}`);
-        handleObdPidResponse(pid, a, b);
+        const c = payload[idx + 4] ?? 0;
+        const d = payload[idx + 5] ?? 0;
+        logBle(`📊 Resposta OBD2: modo=41 PID=0x${pid.toString(16).toUpperCase().padStart(2, '0')} A=0x${a.toString(16).toUpperCase().padStart(2, '0')} B=0x${b.toString(16).toUpperCase().padStart(2, '0')} C=0x${c.toString(16).toUpperCase().padStart(2, '0')} D=0x${d.toString(16).toUpperCase().padStart(2, '0')}`);
+        handleObdPidResponse(pid, a, b, c, d);
         return;
       }
 
@@ -2865,19 +2909,13 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
           try {
             if (currentObdMode === 'AD10') {
               tick++;
-              const payloads = 5;
-              const total = AD10_OBD_CMDS.length * payloads;
-
-              // Reenvia a configuração CAN periodicamente (o dongle pode reiniciar o scanner)
-              if (tick % (total + 4) === 0) {
-                await sendAd10ConfigCommand(buildAd10CanConfigEntries());
-                await new Promise(r => setTimeout(r, 250));
-              } else {
-                // ⭐ Pedido oficial rotacionando PIDs (replica exata do app oficial, 0x6009)
-                const pids = [0x0C, 0x0D, 0x05, 0x04, 0x0F, 0x11, 0x42]; // RPM, vel, temp, load, MAF, TPS, tensao
-                const pid = pids[tick % pids.length];
-                await sendAd10ObdRequestOficial(pid);
-              }
+              // ⭐ Polling IDÊNTICO ao app oficial: só pedido 0x6009 rotacionando PIDs.
+              //    O oficial NÃO reenvia a config no loop (blecmd.log: config aparece só 2x no inicio).
+              const pids = [0x0C, 0x0D, 0x05, 0x04, 0x0F, 0x11, 0x42,
+                            0x0B, 0x07, 0x0E, 0x10, 0x13, 0x15, 0x2E, 0x2F,
+                            0x30, 0x31, 0x32, 0x33, 0x43, 0x44, 0x45, 0x46, 0x47, 0x4A, 0x4C];
+              const pid = pids[tick % pids.length];
+              await sendAd10ObdRequestOficial(pid);
             } else {
               // Modo Universal ELM327: comandos ASCII limpos
               const item = POLL_QUEUE[pollIndex];
@@ -2985,7 +3023,7 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
       const can = document.getElementById('telemetryCanStatus')?.textContent || '--';
       const recentLogs = bleLogs.slice(-10).join('<br>');
       const msg = `
-        <strong>Versão do App:</strong> v1.5.0 (Build 18/11 — pedido 0x6009 replicado do blecmd.log)<br>
+        <strong>Versão do App:</strong> v1.6.0 (Build 18/11 — 26 PIDs + dados estendidos)<br>
         <strong>Modo OBD Ativo:</strong> ${currentObdMode === 'AD10' ? '⚡ AD10 Nativo (binário 0xAA, cmd BIG-ENDIAN)' : '🔌 ELM327 Universal (AT ASCII)'}<br>
         <strong>Dispositivo:</strong> ${dev}<br>
         <strong>CAN Status:</strong> ${can}<br>
