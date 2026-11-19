@@ -136,8 +136,16 @@ Em `multcar-app/www/index.html`:
 
 ---
 
-## 5. ⏳ O que falta
+## 5. ✅ VALIDADO NO CARRO (19/11/2026) — MISSÃO CUMPRIDA
 
-**1 teste final no carro** (5 min, chave na II, motor desligado):
-instalar v1.5.0 (badge `v1.5.0 • 18/11`), conectar, esperar, exportar log.
-Se aparecer `🛰️ Frame CAN ID 0x07E8` e `📊 Resposta OBD2 PID=0x0C` → **FECHAR O APP**.
+**O teste final foi feito e DEU CERTO.** Log das 04:42 (ignição II, motor desligado):
+`
+TX AA 05 0D 60 09 0B 08 07 DF 02 01 0C 00 00 00 00 00 B5
+RX 55 05 0D 60 0A 0B 08 07 E8 04 41 0C 15 FB AA AA AA 83
+📊 Resposta OBD2: modo=41 PID=0x0C A=0x15 B=0xFB
+`
+→ RPM ≈ 1400 lido ao vivo. Todos os 26 PIDs responderam. Prints:
+`WhatsApp Image 2026-11-19 05.06*.jpeg`.
+
+**Estado final:** app completo e funcional (v1.6.3). O protocolo deste documento
+está **100% confirmado no veículo**.

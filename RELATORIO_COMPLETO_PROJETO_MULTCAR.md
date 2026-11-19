@@ -522,6 +522,15 @@ Para facilitar a manutenção contínua e eliminar comandos longos no terminal d
 
 ## 14. Histórico de Versões e Builds
 
+- **v1.6.3 (19/11/2026) — 🏆 APP FUNCIONANDO + IA ajustada:**
+  - **Teste de campo DEU CERTO:** carro responde todos os PIDs (RPM 1020–1259,
+    velocidade, temp, alternador 14,2–14,8 V). Protocolo `0x6009` validado no veículo.
+  - v1.6.1: overlay flutuante removido + RPM prioritário (a cada 2 ciclos).
+  - v1.6.2: nova **aba 📈 Dados** com 18 sensores (cards atualizados em tempo real).
+  - v1.6.3: Gemini removido, **OpenRouter padrão**, **OmniRoute adicionado**
+    (`https://omnirouter.housecloud.tec.br/v1/chat/completions`), Groq e NVIDIA mantidos.
+  - DTC corrigido para `0x6009` modo 03/04 (commit b01f99b).
+- **v1.6.0 (18/11):** 26 PIDs no polling (replica do oficial + uteis).
 - **v1.5.0 (Build 18/11/2026) — 🏆 PROTOCOLO EXATO DESCOBERTO via `blecmd.log` do app oficial:**
   - **Achado decisivo:** o arquivo `C:\Users\welld\AppData\Local\Temp\blecmd.log` (1,1 MB),
     gravado pelo **próprio app oficial XTOOL em 15/11**, continha **3925 respostas `0x600A`**

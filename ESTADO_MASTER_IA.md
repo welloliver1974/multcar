@@ -1,18 +1,21 @@
 # 📋 ESTADO-MASTER DO PROJETO MULTCAR PRO — Para qualquer IA continuar daqui
 
-> **Última atualização:** 19/nov/2026 · **Versão atual do código:** v1.6.1 (badge `v1.6.1 • 19/11`)
-> **Último commit:** `bfa2ba3` · **Branch:** `main` sincronizado com origin ✅
+> **Última atualização:** 19/nov/2026 · **Versão atual do código:** v1.6.3 (badge `v1.6.3 • 19/11`)
+> **Último commit:** `ca6df4a` · **Branch:** `main` sincronizado com origin ✅
 >
-> ## 🏆 SUCESSO NO CARRO (19/11) — O APP FUNCIONA!
-> Teste de campo confirmou: o carro responde todos os PIDs. Prints e log mostram
-> **RPM 1020**, velocidade 6 km/h, temperatura 43 °C, alternador 14,28 V — tudo ao vivo.
+> ## 🏆 SUCESSO NO CARRO (19/11) — O APP ESTÁ PRONTO E FUNCIONANDO!
+> Teste de campo confirmou: o carro responde **todos os PIDs**. Prints e log mostram
+> **RPM 1020–1259**, velocidade 2–21 km/h, temperatura 28–50 °C, alternador 14,2–14,8 V — tudo ao vivo.
 > O protocolo `0x6009` replicado do `blecmd.log` está **100% validado no veículo**.
-> A v1.6.1 só ajusta acabamento: removeu o painel flutuante que cobria a tela e deu
-> prioridade ao RPM (antes atualizava a cada ~15 s). **Falta só suprimir o toast de
-> "Dica de Comunicação" que aparece quando o dongle ainda não respondeu (falso positivo).**
 >
-> **🔥 LEIA A SEÇÃO 3.3 PRIMEIRO** — achamos o `blecmd.log` do app oficial e o protocolo
-> exato foi replicado. Falta só o teste final no carro.
+> **Versões finais do dia 19/11 (todas commitadas):**
+> - v1.6.0 → 26 PIDs + painel flutuante (que ficou ruim, removido depois)
+> - v1.6.1 → removeu overlay + RPM prioritário (a cada 2 ciclos)
+> - v1.6.2 → nova **aba 📈 Dados** com 18 sensores (no lugar do overlay)
+> - v1.6.3 → **IA ajustada**: Gemini removido, OpenRouter padrão, OmniRoute adicionado
+>
+> **📌 Único ajuste cosmético pendente (opcional):** suprimir o toast "💡 Dica de Comunicação"
+> que aparece quando o dongle ainda não respondeu (falso positivo no início).
 
 ---
 
@@ -228,6 +231,47 @@ powershell -ExecutionPolicy Bypass -File tools\reversing\ad10\capturar_oficial.p
 ```
 
 ---
+
+---
+
+## 9. 📅 Registro do dia 19/11/2026 — SUCESSO + acabamentos finais
+
+### 9.1. Teste de campo (04:42, ignição II, motor desligado)
+- Handshake perfeito: V01.20, tensão 14,24 V, status 133=1.
+- Config `0x6001` (12 subs) aceita (ACK `0x600B [60 01 01]`).
+- Pedido `0x6009 PID=0x0C` → **resposta `0x600A ... 41 0C 15 FB` = ~1400 RPM imediato!**
+- Todos os 26 PIDs responderam (RPM, vel, temp, MAP, load, tensão, lambda, EGR...).
+- Prints salvos em `E:\Apps\Multcar\WhatsApp Image 2026-11-19 05.06*.jpeg`.
+- Log completo: mensagem do usuário (04:42–04:43).
+
+### 9.2. Problemas relatados e corrigidos
+| Problema | Causa | Correção |
+|---|---|---|
+| "tela em cima da outra" | painel flutuante `extendedDataBox` (position:fixed) criado na v1.6.0 | removido; dados foram pro log (v1.6.1) |
+| "RPM travando" | 26 PIDs rotacionados um por vez → RPM só a cada ~15 s | RPM prioritário a cada 2 ciclos (v1.6.1) |
+| pedido de dados estendidos sumiu | log só não era visível | nova **aba 📈 Dados** com 18 cards (v1.6.2) |
+| DTC não funcionava | botão usava `0x6002` | corrigido p/ `0x6009` modo 03/04 (v1.5.0, commit b01f99b) |
+
+### 9.3. Aba 📈 Dados (v1.6.2)
+Cards: MAF, avanço de ignição, sonda lambda 1/2, nível de combustível, purga,
+tensão do sistema, avanço máximo, EGR, pressão absoluta, carga de referência,
+comando/erro EGR, temp. ambiente/compartimento, controle de marcha, tempo com MIL,
+MAF alternativo. `setExtended()` atualiza os cards via `EXT_MAP` (PID → id do elemento).
+
+### 9.4. Preferências de IA do usuário (v1.6.3, commit ca6df4a)
+- ❌ **Gemini removido** (nunca funcionava para o usuário)
+- ⭐ **OpenRouter como padrão**: modelo `meta-llama/llama-3.3-70b-instruct:free`,
+  endpoint `https://openrouter.ai/api/v1/chat/completions`
+- 🔀 **OmniRoute adicionado**: endpoint real fornecido pelo usuário
+  `https://omnirouter.housecloud.tec.br/v1/chat/completions`
+- ⚡ Groq (Llama 3.3 70B) e 🟢 NVIDIA NIM mantidos
+- Chave de API vai **no próprio app** (aba Mecânico IA → ⚙️ Provedores), salva em `localStorage`
+
+### 9.5. Estado final
+- APK: `Multcar_Pro_v1.2.apk` (19/11, 07:xx), badge `v1.6.3 • 19/11`
+- Git: `main` sincronizado, último commit `ca6df4a`
+- **App funcional e completo. Faltam só acabamentos cosméticos opcionais.**
+
 
 ## 8. 📚 Índice de documentos (state de cada um)
 
