@@ -815,7 +815,7 @@
     <div class="brand">
       <h1>🏎️ MULTCAR</h1>
       <span class="badge">Prisma 1.4</span>
-      <span class="badge version-badge" id="appVersionBadge" title="Multcar Pro v1.6.3 — provedores IA: OpenRouter/Groq/NVIDIA/OmniRoute">v1.6.3 • 19/11</span>
+      <span class="badge version-badge" id="appVersionBadge" title="Multcar Pro v1.6.4 — polling fluido 120ms + sem handshake duplo">v1.6.4 • 19/11</span>
     </div>
     <div class="header-actions">
       <div class="status-badge">
@@ -2897,7 +2897,8 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave de API (OpenRouter, Groq,
      * - Modo ELM327 Universal: comandos AT ASCII (para dongles ELM327 reais).
      */
     function startPolling() {
-      if (isPolling) return;
+      // Cancela qualquer loop anterior antes de iniciar (evita duplicatas na reconexao)
+      stopPolling();
       isPolling = true;
       pollIndex = 0;
       const enc = new TextEncoder();
@@ -2962,7 +2963,8 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave de API (OpenRouter, Groq,
             logBle(`Erro no poll: ${ePoll.message || ePoll}`);
           }
 
-          const delay = (rxCount > 0) ? 600 : 900;
+          // Delay curto para telemetria fluida (app oficial faz ~90ms)
+          const delay = (rxCount > 0) ? 120 : 200;
           pollingInterval = setTimeout(pollStep, delay);
         }
 
@@ -2982,7 +2984,14 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave de API (OpenRouter, Groq,
     let ad10ReconnectTimer = null;
     let ad10ReconnectTries = 0;
 
+    let ad10DisconnectGuard = false; // evita processar a MESMA desconexao 2x
     function onBleDisconnected() {
+      // ⚠️ O callback de disconnect do Capacitor e o nosso podem disparar
+      //    quase simultaneamente -> guard de reentrancia (2 notificações,
+      //    2 handshakes, 2 loops de polling = write timeout)
+      if (ad10DisconnectGuard) { logBle('⟳ Desconexão já em processamento (ignorada)'); return; }
+      ad10DisconnectGuard = true;
+      setTimeout(() => { ad10DisconnectGuard = false; }, 1500);
       console.warn('[BLE] Dispositivo desconectado');
       logBle(`⟪⟪⟪ BLE DESCONECTOU ⟫⟫⟫ — último quadro TX: ${lastTxFrame}`);
       if (currentDeviceId) { ad10ReconnectMac = currentDeviceId; }
@@ -3001,8 +3010,9 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave de API (OpenRouter, Groq,
               await BC.connect(mac, () => { });
               await setupBleGattAndListeners(mac);
               isConnectedBle = true;
-              logBle('✔ Reconectado ao AD10 — reenviando configuração CAN…');
-              await initAd10Device();
+              logBle('✔ Reconectado ao AD10 — retomando telemetria…');
+              // ⚠️ NÃO chamar initAd10Device() aqui: startPolling() já faz o handshake.
+              //    Chamar os dois causava handshake duplo -> 2 loops -> write timeout.
               connDot.className = 'dot connected';
               connText.textContent = 'AD10 OK';
               btnConnectBle.textContent = '🔌 Desconectar';
@@ -3057,7 +3067,7 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave de API (OpenRouter, Groq,
       const can = document.getElementById('telemetryCanStatus')?.textContent || '--';
       const recentLogs = bleLogs.slice(-10).join('<br>');
       const msg = `
-        <strong>Versão do App:</strong> v1.6.3 (Build 19/11 — IA: OpenRouter padrao, sem Gemini)<br>
+        <strong>Versão do App:</strong> v1.6.4 (Build 19/11 — polling fluido + reconexao estavel)<br>
         <strong>Modo OBD Ativo:</strong> ${currentObdMode === 'AD10' ? '⚡ AD10 Nativo (binário 0xAA, cmd BIG-ENDIAN)' : '🔌 ELM327 Universal (AT ASCII)'}<br>
         <strong>Dispositivo:</strong> ${dev}<br>
         <strong>CAN Status:</strong> ${can}<br>
