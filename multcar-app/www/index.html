@@ -815,7 +815,7 @@
     <div class="brand">
       <h1>🏎️ MULTCAR</h1>
       <span class="badge">Prisma 1.4</span>
-      <span class="badge version-badge" id="appVersionBadge" title="Multcar Pro v1.6.0 — 26 PIDs + painel de dados estendidos">v1.6.0 • 18/11</span>
+      <span class="badge version-badge" id="appVersionBadge" title="Multcar Pro v1.6.1 — RPM prioritario, sem painel flutuante">v1.6.1 • 19/11</span>
     </div>
     <div class="header-actions">
       <div class="status-badge">
@@ -2037,18 +2037,9 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
     /**
      * Atualiza os mostradores e computador de bordo com a resposta do sensor
      */
-    // grava dados estendidos num painel flutuante (cria se nao existir)
+    // Dados estendidos: apenas log (sem painel flutuante que cobre a tela)
     function setExtended(pidKey, label, value) {
-      let box = document.getElementById('extendedDataBox');
-      if (!box) {
-        box = document.createElement('div');
-        box.id = 'extendedDataBox';
-        box.style.cssText = 'position:fixed;bottom:8px;left:8px;z-index:9999;background:rgba(8,15,30,.88);border:1px solid #334155;border-radius:8px;padding:6px 10px;font:11px monospace;color:#93c5fd;max-width:260px;line-height:1.5;pointer-events:none;';
-        document.body.appendChild(box);
-      }
-      let row = document.getElementById('ext_' + pidKey);
-      if (!row) { row = document.createElement('div'); row.id = 'ext_' + pidKey; box.appendChild(row); }
-      row.textContent = label + ': ' + value;
+      logBle(`📈 ${label}: ${value}`);
     }
 
     function handleObdPidResponse(pid, a, b, c, d) {
@@ -2909,12 +2900,12 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
           try {
             if (currentObdMode === 'AD10') {
               tick++;
-              // ⭐ Polling IDÊNTICO ao app oficial: só pedido 0x6009 rotacionando PIDs.
-              //    O oficial NÃO reenvia a config no loop (blecmd.log: config aparece só 2x no inicio).
-              const pids = [0x0C, 0x0D, 0x05, 0x04, 0x0F, 0x11, 0x42,
-                            0x0B, 0x07, 0x0E, 0x10, 0x13, 0x15, 0x2E, 0x2F,
-                            0x30, 0x31, 0x32, 0x33, 0x43, 0x44, 0x45, 0x46, 0x47, 0x4A, 0x4C];
-              const pid = pids[tick % pids.length];
+              // ⭐ Prioridade: RPM a cada 2 pedidos, vel/temp alternados, estendidos rotacionam.
+              //    (com 26 PIDs seguidos o RPM demorava ~15s pra atualizar)
+              const basicos = [0x0C, 0x0D, 0x05, 0x0C, 0x04, 0x0C, 0x0B, 0x0C, 0x0F, 0x42, 0x0C, 0x11, 0x07];
+              const estendidos = [0x0E, 0x10, 0x13, 0x15, 0x2E, 0x2F, 0x30, 0x31, 0x32, 0x33, 0x43, 0x44, 0x45, 0x46, 0x47, 0x4A, 0x4C];
+              const seq = basicos.concat(estendidos);
+              const pid = seq[tick % seq.length];
               await sendAd10ObdRequestOficial(pid);
             } else {
               // Modo Universal ELM327: comandos ASCII limpos
@@ -3023,7 +3014,7 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
       const can = document.getElementById('telemetryCanStatus')?.textContent || '--';
       const recentLogs = bleLogs.slice(-10).join('<br>');
       const msg = `
-        <strong>Versão do App:</strong> v1.6.0 (Build 18/11 — 26 PIDs + dados estendidos)<br>
+        <strong>Versão do App:</strong> v1.6.1 (Build 19/11 — RPM prioritario + sem overlay)<br>
         <strong>Modo OBD Ativo:</strong> ${currentObdMode === 'AD10' ? '⚡ AD10 Nativo (binário 0xAA, cmd BIG-ENDIAN)' : '🔌 ELM327 Universal (AT ASCII)'}<br>
         <strong>Dispositivo:</strong> ${dev}<br>
         <strong>CAN Status:</strong> ${can}<br>
