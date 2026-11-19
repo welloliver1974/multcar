@@ -1,7 +1,7 @@
 # 📋 ESTADO-MASTER DO PROJETO MULTCAR PRO — Para qualquer IA continuar daqui
 
-> **Última atualização:** 18/nov/2026 · **Versão atual do código:** v1.5.0 (badge `v1.5.0 • 18/11`)
-> **Último commit:** `ed0a13c` · **Branch:** `main` sincronizado com origin ✅
+> **Última atualização:** 18/nov/2026 · **Versão atual do código:** v1.6.0 (badge `v1.6.0 • 18/11`)
+> **Último commit:** `73ecf66` · **Branch:** `main` sincronizado com origin ✅
 >
 > **🔥 LEIA A SEÇÃO 3.3 PRIMEIRO** — achamos o `blecmd.log` do app oficial e o protocolo
 > exato foi replicado. Falta só o teste final no carro.
@@ -112,6 +112,13 @@ respondendo (RPM `41 0C 00 00`, VIN, coolant, battery etc).
 
 **Implementado na v1.5.0:** `sendAd10ObdRequestOficial(pid)`, config de 12 subs copiada
 byte a byte, can_scan removido, decoder `0x600A` validado contra os bytes reais.
+
+**v1.6.0 (18/11 — app "bem completo"):** ampliado pra **26 PIDs** no polling
+(RPM, vel, temp, load, MAF, TPS, tensão, MAP, lambda, EGR, combustível, avanço, etc.);
+decoder aceita bytes C/D e tem cases pra todos; **painel flutuante "Dados Estendidos"**
+mostra os valores em tempo real; polling simplificado (só `0x6009`, sem reenvio de config,
+idêntico ao oficial).
+
 ➡️ **Falta só o teste final no carro** (5 min, chave II). Se aparecer `🛰️ Frame CAN ID 0x07E8`
 e `📊 Resposta OBD2 PID=0x0C` → **FECHAR O APP**.
 
