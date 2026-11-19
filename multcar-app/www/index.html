@@ -815,7 +815,7 @@
     <div class="brand">
       <h1>🏎️ MULTCAR</h1>
       <span class="badge">Prisma 1.4</span>
-      <span class="badge version-badge" id="appVersionBadge" title="Multcar Pro v1.6.1 — RPM prioritario, sem painel flutuante">v1.6.1 • 19/11</span>
+      <span class="badge version-badge" id="appVersionBadge" title="Multcar Pro v1.6.2 — aba Dados Estendidos + RPM prioritario">v1.6.2 • 19/11</span>
     </div>
     <div class="header-actions">
       <div class="status-badge">
@@ -838,6 +838,7 @@
     <button class="tab-btn" data-tab="tabOscilloscope">🔬 Sonda</button>
     <button class="tab-btn" data-tab="tabDiagnostics">🛠️ Falhas DTC</button>
     <button class="tab-btn" data-tab="tabVehicleInfo">📋 Veículo</button>
+    <button class="tab-btn" data-tab="tabExtended">📈 Dados</button>
   </div>
 
   <main>
@@ -1254,6 +1255,36 @@ Toque em "⚡ Diagnosticar" para que o Mecânico IA avalie todos os sensores do 
       </div>
     </div>
 
+
+    <!-- 📈 ABA DE DADOS ESTENDIDOS -->
+    <div class="tab-content" id="tabExtended">
+      <div class="card" style="align-items: stretch;">
+        <h2 style="font-size: 0.95rem; color: #fff; margin-bottom: 4px;">📈 Dados Estendidos (ECU)</h2>
+        <p style="font-size: 0.72rem; color: var(--muted); margin: 0 0 10px 0;">
+          Sensores adicionais lidos do AD10 em tempo real. Toque na aba para acompanhar.
+        </p>
+        <div class="module-grid" id="extendedGrid">
+          <div class="stat-card"><div class="label">MAF</div><div class="num" id="extMAF" style="font-size:0.95rem;">--</div></div>
+          <div class="stat-card"><div class="label">Avanço de ignição</div><div class="num" id="extAdv" style="font-size:0.95rem;">--</div></div>
+          <div class="stat-card"><div class="label">Sonda Lambda 1</div><div class="num" id="extLambda1" style="font-size:0.95rem;">--</div></div>
+          <div class="stat-card"><div class="label">Sonda Lambda 2</div><div class="num" id="extLambda2" style="font-size:0.95rem;">--</div></div>
+          <div class="stat-card"><div class="label">Nível de combustível</div><div class="num" id="extFuel" style="font-size:0.95rem;">--</div></div>
+          <div class="stat-card"><div class="label">Purga evaporativa</div><div class="num" id="extPurge" style="font-size:0.95rem;">--</div></div>
+          <div class="stat-card"><div class="label">Tensão do sistema</div><div class="num" id="extSysVolt" style="font-size:0.95rem;">--</div></div>
+          <div class="stat-card"><div class="label">Avanço máximo</div><div class="num" id="extAdvMax" style="font-size:0.95rem;">--</div></div>
+          <div class="stat-card"><div class="label">EGR</div><div class="num" id="extEgr" style="font-size:0.95rem;">--</div></div>
+          <div class="stat-card"><div class="label">Pressão absoluta</div><div class="num" id="extPress" style="font-size:0.95rem;">--</div></div>
+          <div class="stat-card"><div class="label">Carga de referência</div><div class="num" id="extRefLoad" style="font-size:0.95rem;">--</div></div>
+          <div class="stat-card"><div class="label">Comando EGR</div><div class="num" id="extCmdEgr" style="font-size:0.95rem;">--</div></div>
+          <div class="stat-card"><div class="label">Erro EGR</div><div class="num" id="extErrEgr" style="font-size:0.95rem;">--</div></div>
+          <div class="stat-card"><div class="label">Temp. ambiente</div><div class="num" id="extAmbTemp" style="font-size:0.95rem;">--</div></div>
+          <div class="stat-card"><div class="label">Temp. compartimento</div><div class="num" id="extBayTemp" style="font-size:0.95rem;">--</div></div>
+          <div class="stat-card"><div class="label">Controle de marcha</div><div class="num" id="extIdle" style="font-size:0.95rem;">--</div></div>
+          <div class="stat-card"><div class="label">Tempo com MIL</div><div class="num" id="extMilTime" style="font-size:0.95rem;">--</div></div>
+          <div class="stat-card"><div class="label">MAF (alternativo)</div><div class="num" id="extMafAlt" style="font-size:0.95rem;">--</div></div>
+        </div>
+      </div>
+    </div>
   </main>
 
   <!-- TOAST / MODAL DE AVISO EM TEMPO REAL (NUNCA FALHA SILENCIOSAMENTE) -->
@@ -2037,8 +2068,20 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
     /**
      * Atualiza os mostradores e computador de bordo com a resposta do sensor
      */
-    // Dados estendidos: apenas log (sem painel flutuante que cobre a tela)
+    // Dados estendidos: escreve na aba 📈 Dados (sem overlay na tela)
+    const EXT_MAP = {
+      '0F': 'extMAF', '10': 'extMafAlt', '0E': 'extAdv', '31': 'extAdvMax',
+      '13': 'extLambda1', '15': 'extLambda2', '2E': 'extFuel', '2F': 'extPurge',
+      '30': 'extSysVolt', '32': 'extEgr', '33': 'extPress', '43': 'extRefLoad',
+      '44': 'extCmdEgr', '45': 'extErrEgr', '46': 'extAmbTemp', '47': 'extBayTemp',
+      '4A': 'extIdle', '4C': 'extMilTime'
+    };
     function setExtended(pidKey, label, value) {
+      const id = EXT_MAP[pidKey];
+      if (id) {
+        const el = document.getElementById(id);
+        if (el) el.textContent = value;
+      }
       logBle(`📈 ${label}: ${value}`);
     }
 
@@ -3014,7 +3057,7 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
       const can = document.getElementById('telemetryCanStatus')?.textContent || '--';
       const recentLogs = bleLogs.slice(-10).join('<br>');
       const msg = `
-        <strong>Versão do App:</strong> v1.6.1 (Build 19/11 — RPM prioritario + sem overlay)<br>
+        <strong>Versão do App:</strong> v1.6.2 (Build 19/11 — aba Dados Estendidos)<br>
         <strong>Modo OBD Ativo:</strong> ${currentObdMode === 'AD10' ? '⚡ AD10 Nativo (binário 0xAA, cmd BIG-ENDIAN)' : '🔌 ELM327 Universal (AT ASCII)'}<br>
         <strong>Dispositivo:</strong> ${dev}<br>
         <strong>CAN Status:</strong> ${can}<br>

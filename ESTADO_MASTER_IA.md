@@ -1,7 +1,15 @@
 # 📋 ESTADO-MASTER DO PROJETO MULTCAR PRO — Para qualquer IA continuar daqui
 
-> **Última atualização:** 18/nov/2026 · **Versão atual do código:** v1.6.0 (badge `v1.6.0 • 18/11`)
-> **Último commit:** `73ecf66` · **Branch:** `main` sincronizado com origin ✅
+> **Última atualização:** 19/nov/2026 · **Versão atual do código:** v1.6.1 (badge `v1.6.1 • 19/11`)
+> **Último commit:** `bfa2ba3` · **Branch:** `main` sincronizado com origin ✅
+>
+> ## 🏆 SUCESSO NO CARRO (19/11) — O APP FUNCIONA!
+> Teste de campo confirmou: o carro responde todos os PIDs. Prints e log mostram
+> **RPM 1020**, velocidade 6 km/h, temperatura 43 °C, alternador 14,28 V — tudo ao vivo.
+> O protocolo `0x6009` replicado do `blecmd.log` está **100% validado no veículo**.
+> A v1.6.1 só ajusta acabamento: removeu o painel flutuante que cobria a tela e deu
+> prioridade ao RPM (antes atualizava a cada ~15 s). **Falta só suprimir o toast de
+> "Dica de Comunicação" que aparece quando o dongle ainda não respondeu (falso positivo).**
 >
 > **🔥 LEIA A SEÇÃO 3.3 PRIMEIRO** — achamos o `blecmd.log` do app oficial e o protocolo
 > exato foi replicado. Falta só o teste final no carro.
