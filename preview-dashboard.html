@@ -815,7 +815,7 @@
     <div class="brand">
       <h1>🏎️ MULTCAR</h1>
       <span class="badge">Prisma 1.4</span>
-      <span class="badge version-badge" id="appVersionBadge" title="Multcar Pro v1.6.2 — aba Dados Estendidos + RPM prioritario">v1.6.2 • 19/11</span>
+      <span class="badge version-badge" id="appVersionBadge" title="Multcar Pro v1.6.3 — provedores IA: OpenRouter/Groq/NVIDIA/OmniRoute">v1.6.3 • 19/11</span>
     </div>
     <div class="header-actions">
       <div class="status-badge">
@@ -1057,10 +1057,10 @@
           <div class="input-group">
             <label>Provedor de IA:</label>
             <select class="input-field" id="aiProviderSelect">
+              <option value="openrouter">🌐 OpenRouter (Modelos Gratuitos) ⭐</option>
               <option value="groq">⚡ Groq (Llama 3.3 70B - Grátis e Ultrarrápido)</option>
-              <option value="gemini">🧠 Google Gemini 2.0 Flash (Grátis)</option>
-              <option value="openrouter">🌐 OpenRouter (Modelos Gratuitos)</option>
               <option value="nvidia">🟢 NVIDIA NIM</option>
+              <option value="omniroute">🔀 OmniRoute (configure o endpoint abaixo)</option>
               <option value="custom">⚙️ Servidor Próprio / Ollama</option>
             </select>
           </div>
@@ -1072,12 +1072,12 @@
 
           <div class="input-group">
             <label>ID do Modelo:</label>
-            <input type="text" class="input-field" id="aiModelInput" value="llama-3.3-70b-versatile">
+            <input type="text" class="input-field" id="aiModelInput" value="meta-llama/llama-3.3-70b-instruct:free">
           </div>
 
           <div class="input-group">
             <label>URL Base da API (Endpoint):</label>
-            <input type="text" class="input-field" id="aiEndpointInput" value="https://api.groq.com/openai/v1/chat/completions">
+            <input type="text" class="input-field" id="aiEndpointInput" value="https://openrouter.ai/api/v1/chat/completions">
           </div>
 
           <button class="btn btn-secondary" id="btnSaveAiSettings" style="width: 100%; justify-content: center; margin-top: 4px;">Salvar Preferências</button>
@@ -1658,15 +1658,15 @@ Toque em "⚡ Diagnosticar" para que o Mecânico IA avalie todos os sensores do 
     const aiActiveBadge = document.getElementById('aiActiveBadge');
 
     const PROVIDER_DEFAULTS = {
+      openrouter: { model: 'meta-llama/llama-3.3-70b-instruct:free', endpoint: 'https://openrouter.ai/api/v1/chat/completions', badge: '🌐 OpenRouter ⭐' },
       groq: { model: 'llama-3.3-70b-versatile', endpoint: 'https://api.groq.com/openai/v1/chat/completions', badge: '⚡ Groq • Llama 3.3 70B' },
-      gemini: { model: 'gemini-2.0-flash', endpoint: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', badge: '🧠 Google Gemini 2.0 Flash' },
-      openrouter: { model: 'meta-llama/llama-3.3-70b-instruct:free', endpoint: 'https://openrouter.ai/api/v1/chat/completions', badge: '🌐 OpenRouter (Llama 3.3 Free)' },
       nvidia: { model: 'meta/llama-3.1-70b-instruct', endpoint: 'https://integrate.api.nvidia.com/v1/chat/completions', badge: '🟢 NVIDIA NIM' },
+      omniroute: { model: 'meta-llama/llama-3.3-70b-instruct:free', endpoint: 'https://omnirouter.housecloud.tec.br/v1/chat/completions', badge: '🔀 OmniRoute (HouseCloud)' },
       custom: { model: 'llama3', endpoint: 'http://localhost:11434/v1/chat/completions', badge: '⚙️ Servidor Local / Ollama' }
     };
 
     function loadAiPreferences() {
-      const p = localStorage.getItem('multcar_ai_provider') || 'groq';
+      const p = localStorage.getItem('multcar_ai_provider') || 'openrouter';
       aiProviderSelect.value = p;
       aiApiKeyInput.value = localStorage.getItem(`multcar_ai_key_${p}`) || '';
       aiModelInput.value = localStorage.getItem(`multcar_ai_model_${p}`) || PROVIDER_DEFAULTS[p].model;
@@ -1730,7 +1730,7 @@ Analise a telemetria do Prisma e forneça um parecer direto, técnico, amigável
 
       if (!apiKey && provider !== 'custom') {
         aiResponseText.innerHTML = `⚠️ <strong>Chave não configurada para ${provider.toUpperCase()}.</strong>
-Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemini.
+Toque em <em>"⚙️ Provedores"</em> e cole sua chave de API (OpenRouter, Groq, NVIDIA ou OmniRoute).
 
 <strong>Diagnóstico Local (Simulado):</strong>
 • <strong>Arrefecimento:</strong> ${tempVal.textContent}°C — Faixa ideal (88°C - 98°C).
@@ -3057,7 +3057,7 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave gratuita do Groq ou Gemin
       const can = document.getElementById('telemetryCanStatus')?.textContent || '--';
       const recentLogs = bleLogs.slice(-10).join('<br>');
       const msg = `
-        <strong>Versão do App:</strong> v1.6.2 (Build 19/11 — aba Dados Estendidos)<br>
+        <strong>Versão do App:</strong> v1.6.3 (Build 19/11 — IA: OpenRouter padrao, sem Gemini)<br>
         <strong>Modo OBD Ativo:</strong> ${currentObdMode === 'AD10' ? '⚡ AD10 Nativo (binário 0xAA, cmd BIG-ENDIAN)' : '🔌 ELM327 Universal (AT ASCII)'}<br>
         <strong>Dispositivo:</strong> ${dev}<br>
         <strong>CAN Status:</strong> ${can}<br>
