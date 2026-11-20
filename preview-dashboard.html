@@ -815,7 +815,7 @@
     <div class="brand">
       <h1>🏎️ MULTCAR</h1>
       <span class="badge">Prisma 1.4</span>
-      <span class="badge version-badge" id="appVersionBadge" title="Multcar Pro v1.6.6 — sequencia EXATA do app oficial (descoberta + poll 05 05 0C 10 0D)">v1.6.6 • 20/11</span>
+      <span class="badge version-badge" id="appVersionBadge" title="Multcar Pro v1.6.7 — VIN real da ECU (modo 09) + aba Veículo honesta">v1.6.7 • 20/11</span>
     </div>
     <div class="header-actions">
       <div class="status-badge">
@@ -1241,11 +1241,11 @@ Toque em "⚡ Diagnosticar" para que o Mecânico IA avalie todos os sensores do 
         <div class="module-grid">
           <div class="stat-card">
             <div class="label">Chassi Gravado (VIN)</div>
-            <div class="num" style="font-size: 0.95rem; font-family: monospace; color: var(--accent);">9BGKS69G0FG123456</div>
+            <div class="num" id="vehVin" style="font-size: 0.95rem; font-family: monospace; color: var(--accent);">— (lendo da ECU…)</div>
           </div>
           <div class="stat-card">
             <div class="label">Calibração GM (CALID)</div>
-            <div class="num" style="font-size: 0.95rem; font-family: monospace; color: var(--green);">12658932AA</div>
+            <div class="num" id="vehCalid" style="font-size: 0.95rem; font-family: monospace; color: var(--green);">— (não lido)</div>
           </div>
           <div class="stat-card">
             <div class="label">Barramento Físico</div>
@@ -2429,6 +2429,24 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave de API (OpenRouter, Groq,
           break;
         }
       }
+
+      // === VIN (Modo 09 PID 02) — resposta multi-frame ISO-TP ===
+      // Ex: [.. 0B 08 07 E8 10 14 49 02 01 39 42 47 F6] + [.. 21 ...]
+      for (let j = 0; j < payload.length - 3; j++) {
+        if (payload[j] === 0x49 && payload[j+1] === 0x02) {
+          // 49 02 01 <caracteres...>  (01 = numero de linhas do VIN)
+          const vinBytes = [];
+          for (let k = j + 3; k < payload.length; k++) {
+            if (payload[k] >= 0x20 && payload[k] <= 0x7E) vinBytes.push(payload[k]);
+          }
+          if (vinBytes.length) {
+            const vin = String.fromCharCode(...vinBytes);
+            const el = document.getElementById('vehVin');
+            if (el) el.textContent = vin.slice(0, 17);
+            logBle(`🚗 VIN lido da ECU: ${vin}`);
+          }
+        }
+      }
     }
 
     function renderDtcResults(bytes) {
@@ -2794,6 +2812,18 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave de API (OpenRouter, Groq,
       await sendCanFrame(buildAd10Packet(0x6009, payload));
     }
 
+    /**
+     * Pedido de VIN (Modo 09 PID 02) — replica exata do app oficial:
+     *   AA seq 0D 60 09 0B 08 07 DF 02 09 02 00 00 00 00 00 chk
+     * Resposta em multi-frame ISO-TP: 10 14 49 02 01 <17 chars> + 21 <continuacao>
+     */
+    async function sendAd10VinRequest() {
+      const payload = [0x0B, 0x08, 0x07, 0xDF, 0x02, 0x09, 0x02,
+                       0x00, 0x00, 0x00, 0x00, 0x00];
+      logBle('→ Pedindo VIN da ECU (modo 09 PID 02)...');
+      await sendCanFrame(buildAd10Packet(0x6009, payload));
+    }
+
     async function sendAd10ObdRequest(canId, mode, pid, variant = 0) {
       const frame = buildAd10CanTxFrame(canId, mode, pid, variant);
       logBle(`→ Requisição OBD2 (layout ${variant}): ID 0x${canId.toString(16).toUpperCase()} modo ${mode} PID 0x${pid.toString(16).toUpperCase()} frame=[${hexDump(frame)}]`);
@@ -2861,6 +2891,10 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave de API (OpenRouter, Groq,
 
         logBle('→ Pedido OBD2 (0x6009) — igual ao app oficial...');
         await sendAd10ObdRequestOficial(0x0C);
+        await new Promise(r => setTimeout(r, 200));
+
+        // VIN da ECU (modo 09 PID 02) — uma vez, preenche a aba Veículo
+        await sendAd10VinRequest();
         await new Promise(r => setTimeout(r, 200));
 
         if (statusEl) {
@@ -3105,7 +3139,7 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave de API (OpenRouter, Groq,
       const can = document.getElementById('telemetryCanStatus')?.textContent || '--';
       const recentLogs = bleLogs.slice(-10).join('<br>');
       const msg = `
-        <strong>Versão do App:</strong> v1.6.6 (Build 20/11 — sequencia identica ao oficial)<br>
+        <strong>Versão do App:</strong> v1.6.7 (Build 20/11 — VIN real da ECU)<br>
         <strong>Modo OBD Ativo:</strong> ${currentObdMode === 'AD10' ? '⚡ AD10 Nativo (binário 0xAA, cmd BIG-ENDIAN)' : '🔌 ELM327 Universal (AT ASCII)'}<br>
         <strong>Dispositivo:</strong> ${dev}<br>
         <strong>CAN Status:</strong> ${can}<br>
