@@ -815,7 +815,7 @@
     <div class="brand">
       <h1>🏎️ MULTCAR</h1>
       <span class="badge">Prisma 1.4</span>
-      <span class="badge version-badge" id="appVersionBadge" title="Multcar Pro v1.6.4 — polling fluido 120ms + sem handshake duplo">v1.6.4 • 19/11</span>
+      <span class="badge version-badge" id="appVersionBadge" title="Multcar Pro v1.6.6 — sequencia EXATA do app oficial (descoberta + poll 05 05 0C 10 0D)">v1.6.6 • 20/11</span>
     </div>
     <div class="header-actions">
       <div class="status-badge">
@@ -1500,6 +1500,29 @@ Toque em "⚡ Diagnosticar" para que o Mecânico IA avalie todos os sensores do 
     function setVoltage(volt) {
       voltVal.textContent = volt.toFixed(2);
       document.getElementById('aiDataVolt').textContent = volt.toFixed(2) + ' V';
+      // Aba Bateria: tensao real (PID 0x42 = tensao do modulo/ECU)
+      const rv = document.getElementById('restVoltage');
+      const bd = document.getElementById('batteryDiagnostic');
+      if (rv) {
+        rv.textContent = volt.toFixed(2) + ' V';
+        rv.style.color = volt >= 12.4 && volt <= 12.8 ? 'var(--green)' :
+                         (volt >= 13.5 && volt <= 14.8 ? 'var(--green)' : 'var(--yellow)');
+      }
+      if (bd) {
+        if (volt >= 13.5 && volt <= 14.8) {
+          bd.textContent = '✅ Alternador carregando normalmente (' + volt.toFixed(2) + ' V).';
+          bd.style.color = 'var(--green)';
+        } else if (volt >= 12.4 && volt <= 12.8) {
+          bd.textContent = '✅ Bateria em repouso, tensão normal (' + volt.toFixed(2) + ' V).';
+          bd.style.color = 'var(--green)';
+        } else if (volt < 12.0) {
+          bd.textContent = '⚠️ Bateria baixa (' + volt.toFixed(2) + ' V) — verificar carga.';
+          bd.style.color = 'var(--red)';
+        } else {
+          bd.textContent = 'ℹ️ Tensão: ' + volt.toFixed(2) + ' V (motor em operação).';
+          bd.style.color = 'var(--yellow)';
+        }
+      }
       if (volt < 12.0) {
         battStatus.textContent = 'Bateria Baixa (< 12V)';
         battStatus.style.color = 'var(--red)';
@@ -2946,10 +2969,25 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave de API (OpenRouter, Groq,
               tick++;
               // ⭐ Prioridade: RPM a cada 2 pedidos, vel/temp alternados, estendidos rotacionam.
               //    (com 26 PIDs seguidos o RPM demorava ~15s pra atualizar)
-              const basicos = [0x0C, 0x0D, 0x05, 0x0C, 0x04, 0x0C, 0x0B, 0x0C, 0x0F, 0x42, 0x0C, 0x11, 0x07];
-              const estendidos = [0x0E, 0x10, 0x13, 0x15, 0x2E, 0x2F, 0x30, 0x31, 0x32, 0x33, 0x43, 0x44, 0x45, 0x46, 0x47, 0x4A, 0x4C];
-              const seq = basicos.concat(estendidos);
-              const pid = seq[tick % seq.length];
+              // ⭐ REPLICA EXATA do app oficial (blecmd.log 15/11, 3894 pedidos):
+              //    FASE 1 (descoberta): 40 PIDs, 1x cada
+              //    FASE 2 (polling):    [05, 05, 0C, 10, 0D] repetido a cada ~90ms
+              //    Contagem real do oficial: 05=1542, 0C=771, 0D=771, 10=770
+              const DESCOBERTA = [0x00,0x00,0x00,0x00,0x20,0x40,0x60,0x01,0x03,0x04,
+                0x05,0x06,0x07,0x0B,0x0C,0x0D,0x0E,0x0F,0x10,0x11,0x13,0x14,0x15,
+                0x1C,0x1F,0x2E,0x2F,0x30,0x31,0x32,0x33,0x3C,0x42,0x43,0x44,0x45,
+                0x46,0x47,0x49,0x4A,0x4C];
+              const POLL_OFICIAL = [0x05, 0x05, 0x0C, 0x10, 0x0D];
+              // extra: estendidos rotacionam devagar só para manter a aba 📈 Dados viva
+              const EXTRA = [0x0E,0x13,0x15,0x2E,0x2F,0x30,0x31,0x32,0x33,0x43,0x44,0x45,0x46,0x47,0x4A,0x4C];
+              let pid;
+              if (tick <= DESCOBERTA.length) {
+                pid = DESCOBERTA[tick - 1];
+              } else if ((tick - DESCOBERTA.length) % 21 === 0) {
+                pid = EXTRA[Math.floor((tick - DESCOBERTA.length) / 21) % EXTRA.length];
+              } else {
+                pid = POLL_OFICIAL[(tick - DESCOBERTA.length - 1) % POLL_OFICIAL.length];
+              }
               await sendAd10ObdRequestOficial(pid);
             } else {
               // Modo Universal ELM327: comandos ASCII limpos
@@ -2964,7 +3002,7 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave de API (OpenRouter, Groq,
           }
 
           // Delay curto para telemetria fluida (app oficial faz ~90ms)
-          const delay = (rxCount > 0) ? 120 : 200;
+          const delay = (rxCount > 0) ? 90 : 150;
           pollingInterval = setTimeout(pollStep, delay);
         }
 
@@ -3067,7 +3105,7 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave de API (OpenRouter, Groq,
       const can = document.getElementById('telemetryCanStatus')?.textContent || '--';
       const recentLogs = bleLogs.slice(-10).join('<br>');
       const msg = `
-        <strong>Versão do App:</strong> v1.6.4 (Build 19/11 — polling fluido + reconexao estavel)<br>
+        <strong>Versão do App:</strong> v1.6.6 (Build 20/11 — sequencia identica ao oficial)<br>
         <strong>Modo OBD Ativo:</strong> ${currentObdMode === 'AD10' ? '⚡ AD10 Nativo (binário 0xAA, cmd BIG-ENDIAN)' : '🔌 ELM327 Universal (AT ASCII)'}<br>
         <strong>Dispositivo:</strong> ${dev}<br>
         <strong>CAN Status:</strong> ${can}<br>
