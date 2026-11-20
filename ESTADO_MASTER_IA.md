@@ -1,7 +1,7 @@
 # 📋 ESTADO-MASTER DO PROJETO MULTCAR PRO — Para qualquer IA continuar daqui
 
-> **Última atualização:** 19/nov/2026 · **Versão atual do código:** v1.6.4 (badge `v1.6.4 • 19/11`)
-> **Último commit:** `9171228` · **Branch:** `main` sincronizado com origin ✅
+> **Última atualização:** 20/nov/2026 · **Versão atual do código:** v1.6.6 (badge `v1.6.6 • 20/11`)
+> **Último commit:** `5ad12c8` · **Branch:** `main` sincronizado com origin ✅
 >
 > ## 🏆 SUCESSO NO CARRO (19/11) — O APP ESTÁ PRONTO E FUNCIONANDO!
 > Teste de campo confirmou: o carro responde **todos os PIDs**. Prints e log mostram
@@ -14,7 +14,8 @@
 > - v1.6.2 → nova **aba 📈 Dados** com 18 sensores (no lugar do overlay)
 > - v1.6.3 → **IA ajustada**: Gemini removido, OpenRouter padrão, OmniRoute adicionado
 > - v1.6.4 → **polling fluido (120ms) + reconexão sem duplicatas** (corrigiu travamento e desconexão do log 07:47)
->
+> - v1.6.5 → aba Bateria ligada à tensão real (PID 0x42)
+> - v1.6.6 → **sequência de PIDs EXATA do app oficial** (descoberta 40 PIDs + polling `05 05 0C 10 0D` a 90ms) — RPM agora a cada ~450ms
 > **📌 Único ajuste cosmético pendente (opcional):** suprimir o toast "💡 Dica de Comunicação"
 > que aparece quando o dongle ainda não respondeu (falso positivo no início).
 
@@ -269,8 +270,8 @@ MAF alternativo. `setExtended()` atualiza os cards via `EXT_MAP` (PID → id do 
 - Chave de API vai **no próprio app** (aba Mecânico IA → ⚙️ Provedores), salva em `localStorage`
 
 ### 9.5. Estado final
-- APK: `Multcar_Pro_v1.2.apk` (19/11, 08:15), badge `v1.6.4 • 19/11`
-- Git: `main` sincronizado, último commit `9171228`
+- APK: `Multcar_Pro_v1.2.apk` (20/11, 20:17), badge `v1.6.6 • 20/11`
+- Git: `main` sincronizado, último commit `5ad12c8`
 - **App funcional e completo. Faltam só acabamentos cosméticos opcionais.**
 
 
