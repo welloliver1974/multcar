@@ -16,6 +16,12 @@
 > - v1.6.4 → **polling fluido (120ms) + reconexão sem duplicatas** (corrigiu travamento e desconexão do log 07:47)
 > - v1.6.5 → aba Bateria ligada à tensão real (PID 0x42)
 > - v1.6.6 → **sequência de PIDs EXATA do app oficial** (descoberta 40 PIDs + polling `05 05 0C 10 0D` a 90ms) — RPM agora a cada ~450ms
+> - v1.6.7 → **VIN real da ECU** via modo 09 PID 02 (aba Veículo antes tinha valores fixos)
+
+**ℹ️ Sobre o CONSUMO (pergunta do usuário em 20/11):** o AD10 **não fornece consumo**.
+O app calcula via **Speed-Density**: `L/h = RPM × MAP(kPa) × 0.00034 × (1 + LTFT/100)`,
+com RPM/MAP/LTFT **reais do AD10** (PIDs 0x0C/0x0B/0x07). É uma **estimativa** (o app
+oficial XTOOL também calcula, não lê consumo direto). Confiável como tendência, não medição exata.
 > **📌 Único ajuste cosmético pendente (opcional):** suprimir o toast "💡 Dica de Comunicação"
 > que aparece quando o dongle ainda não respondeu (falso positivo no início).
 
@@ -270,8 +276,8 @@ MAF alternativo. `setExtended()` atualiza os cards via `EXT_MAP` (PID → id do 
 - Chave de API vai **no próprio app** (aba Mecânico IA → ⚙️ Provedores), salva em `localStorage`
 
 ### 9.5. Estado final
-- APK: `Multcar_Pro_v1.2.apk` (20/11, 20:17), badge `v1.6.6 • 20/11`
-- Git: `main` sincronizado, último commit `5ad12c8`
+- APK: `Multcar_Pro_v1.2.apk` (20/11, 20:31), badge `v1.6.7 • 20/11`
+- Git: `main` sincronizado, último commit `20892e8`
 - **App funcional e completo. Faltam só acabamentos cosméticos opcionais.**
 
 
