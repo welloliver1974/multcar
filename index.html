@@ -815,7 +815,7 @@
     <div class="brand">
       <h1>🏎️ MULTCAR</h1>
       <span class="badge">Prisma 1.4</span>
-      <span class="badge version-badge" id="appVersionBadge" title="Multcar Pro v1.6.7 — VIN real da ECU (modo 09) + aba Veículo honesta">v1.6.7 • 20/11</span>
+      <span class="badge version-badge" id="appVersionBadge" title="Multcar Pro v1.6.8 — proteção contra canal BLE ausente">v1.6.8 • 22/11</span>
     </div>
     <div class="header-actions">
       <div class="status-badge">
@@ -1965,6 +1965,8 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave de API (OpenRouter, Groq,
     let txCount = 0;
     let rxCount = 0;
     let lastTxFrame = '(nenhum)';
+    let ad10TxFailStreak = 0;   // erros TX consecutivos -> para o polling se passar de 3
+    let ad10ChannelAlertShown = false;
 
     // ======================================================================
     // PROTOCOLO OFICIAL XTOOL AD10 — REVERIFICADO (13/11/2026)
@@ -2557,12 +2559,12 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave de API (OpenRouter, Groq,
             // 1º TENTATIVA: write (com resposta - padrão nativo do app oficial XTOOL BleConnector)
             try {
               await BleClient.write(currentDeviceId, AD10_NUS.SERVICE, charUuid, dataView);
-              lastWriteInfo = 'Write OK (0004)';
+              lastWriteInfo = 'Write OK (0004)'; ad10TxFailStreak = 0;
             } catch (eWriteReq) {
               // 2º TENTATIVA: writeWithoutResponse (fallback para adaptadores que exigem NoResponse)
               try {
                 await BleClient.writeWithoutResponse(currentDeviceId, AD10_NUS.SERVICE, charUuid, dataView);
-                lastWriteInfo = 'WriteNoResp OK (0004)';
+                lastWriteInfo = 'WriteNoResp OK (0004)'; ad10TxFailStreak = 0;
               } catch (eWriteCmd) {
                 lastWriteInfo = `Erro TX 0004: ${eWriteReq.message || eWriteCmd.message}`;
                 logBle(lastWriteInfo);
@@ -3139,7 +3141,7 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave de API (OpenRouter, Groq,
       const can = document.getElementById('telemetryCanStatus')?.textContent || '--';
       const recentLogs = bleLogs.slice(-10).join('<br>');
       const msg = `
-        <strong>Versão do App:</strong> v1.6.7 (Build 20/11 — VIN real da ECU)<br>
+        <strong>Versão do App:</strong> v1.6.8 (Build 22/11 — proteção canal BLE ausente)<br>
         <strong>Modo OBD Ativo:</strong> ${currentObdMode === 'AD10' ? '⚡ AD10 Nativo (binário 0xAA, cmd BIG-ENDIAN)' : '🔌 ELM327 Universal (AT ASCII)'}<br>
         <strong>Dispositivo:</strong> ${dev}<br>
         <strong>CAN Status:</strong> ${can}<br>
@@ -3237,8 +3239,10 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave de API (OpenRouter, Groq,
         });
         activeChannelList.push('0003');
         logBle('Notificação registrada com SUCESSO em 0003 (Canal RX)');
+        ad10ChannelAlertShown = false; ad10TxFailStreak = 0;
       } catch (err0003) {
         logBle(`Falha notif 0003: ${err0003.message || err0003}`);
+        showToast('⚠️ Canal RX ausente', 'Não foi possível ativar a notificação 0003. Tire e recoloque o AD10 e desligue/ligue o Bluetooth.', 'warning', 8000);
       }
 
       const chEl = document.getElementById('telemetryChannels');
