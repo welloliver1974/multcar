@@ -1,7 +1,7 @@
 # 📋 ESTADO-MASTER DO PROJETO MULTCAR PRO — Para qualquer IA continuar daqui
 
-> **Última atualização:** 20/nov/2026 · **Versão atual do código:** v1.6.6 (badge `v1.6.6 • 20/11`)
-> **Último commit:** `5ad12c8` · **Branch:** `main` sincronizado com origin ✅
+> **Última atualização:** 22/nov/2026 · **Versão atual do código:** v1.6.8 (badge `v1.6.8 • 22/11`)
+> **Último commit:** `8e6ee92` · **Branch:** `main` sincronizado com origin ✅
 >
 > ## 🏆 SUCESSO NO CARRO (19/11) — O APP ESTÁ PRONTO E FUNCIONANDO!
 > Teste de campo confirmou: o carro responde **todos os PIDs**. Prints e log mostram
@@ -17,6 +17,7 @@
 > - v1.6.5 → aba Bateria ligada à tensão real (PID 0x42)
 > - v1.6.6 → **sequência de PIDs EXATA do app oficial** (descoberta 40 PIDs + polling `05 05 0C 10 0D` a 90ms) — RPM agora a cada ~450ms
 > - v1.6.7 → **VIN real da ECU** via modo 09 PID 02 (aba Veículo antes tinha valores fixos)
+> - v1.6.8 → **proteção contra canal BLE ausente**: ao 3 erros TX seguidos, para o polling e avisa (tirar dongle 10 s + desligar/ligar Bluetooth)
 
 **ℹ️ Sobre o CONSUMO (pergunta do usuário em 20/11):** o AD10 **não fornece consumo**.
 O app calcula via **Speed-Density**: `L/h = RPM × MAP(kPa) × 0.00034 × (1 + LTFT/100)`,
@@ -276,8 +277,8 @@ MAF alternativo. `setExtended()` atualiza os cards via `EXT_MAP` (PID → id do 
 - Chave de API vai **no próprio app** (aba Mecânico IA → ⚙️ Provedores), salva em `localStorage`
 
 ### 9.5. Estado final
-- APK: `Multcar_Pro_v1.2.apk` (20/11, 20:31), badge `v1.6.7 • 20/11`
-- Git: `main` sincronizado, último commit `20892e8`
+- APK: `Multcar_Pro_v1.2.apk` (22/11, 20:11), badge `v1.6.8 • 22/11`
+- Git: `main` sincronizado, último commit `8e6ee92`
 - **App funcional e completo. Faltam só acabamentos cosméticos opcionais.**
 
 
