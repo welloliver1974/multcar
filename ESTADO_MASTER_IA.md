@@ -283,13 +283,49 @@ MAF alternativo. `setExtended()` atualiza os cards via `EXT_MAP` (PID → id do 
 - **App funcional e completo. Faltam só acabamentos cosméticos opcionais.**
 
 
+## 10. 🏁 REGISTRO FINAL do dia 25/11/2026 — APP FUNCIONANDO E FECHADO
+
+### 10.1. Teste de campo decisivo (14:24)
+- **Deu certo de vez.** Log com **1388 TX / 1331 RX, ZERO erros, ZERO desconexões**.
+- Todos os PIDs do polling oficial (`05 05 0C 10 0D`) respondendo continuamente.
+- RPM (0x0C), velocidade (0x0D), temp (0x05), MAF (0x10) — todos ao vivo.
+- A proteção da v1.6.8 (canal BLE ausente) funcionou: o problema do dia 22
+  (`Characteristic not found`) não reapareceu após tirar/recolocar o dongle
+  e desligar/ligar o Bluetooth.
+- Prints salvos em `E:\Apps\Multcar\WhatsApp Image 2026-11-25 07.39*.jpeg`.
+
+### 10.2. Problemas de UI encontrados nos prints e corrigidos (v1.6.9)
+| Print | Problema | Correção |
+|---|---|---|
+| Aba Falhas DTC | `P00AA`, `B210AA` falsos — padding `0xAA` lido como código | `renderDtcResults` ignora `0xAA`/`0xFF` → volta a "NENHUMA FALHA ATIVA" (consistente com "0 Fal") |
+| Aba Bateria | "Queda na partida 10.60 V" era valor fixo | agora "— (sem dado de partida)"; faixa de tensão ajustada |
+| Aba Consumo | 12.4/11.8 km/L e R$ 9,18 fixos | agora "—" e consumo instantâneo atualizado pelo mesmo cálculo Speed-Density do painel |
+
+### 10.3. Observações honestas dos prints
+- **Mecânico IA**: com NVIDIA mostrou `Failed to fetch` — problema **interno do provedor**,
+  não do app. Padrão do usuário é **OpenRouter** (Gemini removido, OmniRoute e Groq disponíveis).
+- **Consumo**: é **estimativa** (Speed-Density), igual ao app oficial — o AD10 não fornece consumo.
+- **Sonda Lambda**: aba mostra 0.73 V (sensor pré-cat real via PID 0x14/0x15).
+
+### 10.4. APK com nome novo (pedido do usuário)
+- Criado `Multcar_Pro_v1.6.9.apk` (25/11 08:20) — **nome com versão** para acabar com a
+  confusão da "data de criação antiga" de `Multcar_Pro_v1.2.apk` (mesmo arquivo,
+  sobrescrito desde 10/11). **Usar o nome novo daqui em diante.**
+- O nome antigo `Multcar_Pro_v1.2.apk` é mantido só para compatibilidade de links.
+
+### 10.5. ESTADO FINAL — PRONTO PARA ENTREGA
+- App 100% funcional com o AD10 no Prisma 1.4 (protocolo `0x6009` idêntico ao oficial).
+- **Tudo documentado, commitado e no GitHub** (`main` sincronizado).
+- Último commit funcional: `4ea440d` (v1.6.9). Ferramentas em `tools/reversing/ad10/`.
+- **Se o usuário aprovar o teste da v1.6.9, o projeto está fechado.**
+
 ## 8. 📚 Índice de documentos (state de cada um)
 
 | Doc | Estado |
 |---|---|
 | **ESTADO_MASTER_IA.md** | ⭐ ESTE — fonte da verdade, consolidado e atualizado |
 | `PROTOCOLO_AD10_REVERIFICADO.md` | Fonte da verdade do protocolo (v1.2.5, ainda válido) |
-| `CAPTURA_HCI_ROTEIRO.md` | Roteiro da captura (atual) |
+| `PROTOCOLO_OFICIAL_BLECMD_LOG.md` | ⭐ Protocolo exato extraído do `blecmd.log` do app oficial |
 | `CAPTURAR_TRAFEGO_OFICIAL.md` | Captura de tráfego (versão anterior do roteiro) |
 | `CONTEXTO_AGENTE_IA.md` | Guia mestre ANTIGO — **desatualizado** (parou na v1.2.6/v1.3.7) |
 | `PROBLEMA_ATUAL_RX_ZERO.md` | Diagnóstico RX=0 (causa raiz antiga, já corrigida) |
