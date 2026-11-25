@@ -815,7 +815,7 @@
     <div class="brand">
       <h1>🏎️ MULTCAR</h1>
       <span class="badge">Prisma 1.4</span>
-      <span class="badge version-badge" id="appVersionBadge" title="Multcar Pro v1.6.8 — proteção contra canal BLE ausente">v1.6.8 • 22/11</span>
+      <span class="badge version-badge" id="appVersionBadge" title="Multcar Pro v1.6.9 — DTC sem padding falso + abas honestas">v1.6.9 • 25/11</span>
     </div>
     <div class="header-actions">
       <div class="status-badge">
@@ -1157,7 +1157,7 @@ Toque em "⚡ Diagnosticar" para que o Mecânico IA avalie todos os sensores do 
           </div>
           <div class="stat-card">
             <div class="label">Queda na Partida</div>
-            <div class="num" id="crankVoltage" style="color: var(--yellow);">10.60 V</div>
+            <div class="num" id="crankVoltage" style="color: var(--text-dim);">— (sem dado de partida)</div>
             <div style="font-size: 0.65rem; color: var(--green);">Limite seguro: > 9.5V</div>
           </div>
         </div>
@@ -1180,17 +1180,17 @@ Toque em "⚡ Diagnosticar" para que o Mecânico IA avalie todos os sensores do 
         <div class="module-grid">
           <div class="stat-card">
             <div class="label">Consumo Instantâneo</div>
-            <div class="num" id="instantKml" style="color: var(--accent);">12.4 km/L</div>
+            <div class="num" id="instantKml" style="color: var(--accent);">—</div>
             <div style="font-size: 0.65rem; color: var(--text-dim);">Parado: 0.9 L/h</div>
           </div>
           <div class="stat-card">
             <div class="label">Consumo Médio</div>
-            <div class="num" id="avgKml" style="color: var(--green);">11.8 km/L</div>
+            <div class="num" id="avgKml" style="color: var(--green);">—</div>
             <div style="font-size: 0.65rem; color: var(--text-dim);">Viagem: 18.4 km</div>
           </div>
           <div class="stat-card">
             <div class="label">Custo da Viagem</div>
-            <div class="num" id="tripCostReais" style="color: var(--yellow);">R$ 9,18</div>
+            <div class="num" id="tripCostReais" style="color: var(--yellow);">—</div>
             <div style="font-size: 0.65rem; color: var(--text-dim);">Gasto: 1.56 L</div>
           </div>
         </div>
@@ -1411,18 +1411,24 @@ Toque em "⚡ Diagnosticar" para que o Mecânico IA avalie todos os sensores do 
         // Consumo em L/h para SPE/4 1.4 GM
         const consumoLh = (sRpm * sMap * 0.00034) * (1 + (sLtft / 100));
 
+        let consumoKmL = 0;
         if (lastKnownSpeed < 2) {
           dashInstantConsumption.textContent = Math.max(consumoLh, 0.4).toFixed(1);
           dashConsumptionUnit.textContent = 'L/h';
           if (dashTripFuelType) dashTripFuelType.textContent = 'Em Marcha Lenta';
         } else {
-          const consumoKmL = Math.min(lastKnownSpeed / Math.max(consumoLh, 0.1), 35.0);
+          consumoKmL = Math.min(lastKnownSpeed / Math.max(consumoLh, 0.1), 35.0);
           dashInstantConsumption.textContent = consumoKmL.toFixed(1);
           dashConsumptionUnit.textContent = 'km/L';
           if (dashTripFuelType) {
             dashTripFuelType.textContent = consumoKmL >= 13 ? '🟢 Faixa Econômica' : '⛽ Condução Normal';
           }
         }
+        // Aba Consumo: mesmo calculo (estimativa Speed-Density) em tempo real
+        const iKml = document.getElementById('instantKml');
+        if (iKml) iKml.textContent = lastKnownSpeed < 2
+          ? Math.max(consumoLh, 0.4).toFixed(1) + ' L/h'
+          : consumoKmL.toFixed(1) + ' km/L';
       }
     }
 
@@ -1505,8 +1511,7 @@ Toque em "⚡ Diagnosticar" para que o Mecânico IA avalie todos os sensores do 
       const bd = document.getElementById('batteryDiagnostic');
       if (rv) {
         rv.textContent = volt.toFixed(2) + ' V';
-        rv.style.color = volt >= 12.4 && volt <= 12.8 ? 'var(--green)' :
-                         (volt >= 13.5 && volt <= 14.8 ? 'var(--green)' : 'var(--yellow)');
+        rv.style.color = (volt >= 12.4 && volt <= 14.9) ? 'var(--green)' : 'var(--yellow)';
       }
       if (bd) {
         if (volt >= 13.5 && volt <= 14.8) {
@@ -2459,7 +2464,10 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave de API (OpenRouter, Groq,
       for (let j = 0; j < bytes.length - 1; j += 2) {
         const b1 = bytes[j];
         const b2 = bytes[j + 1];
+        // 0xAA e 0x00 sao PADDING ISO-TP, nao codigos de falha
         if (b1 === 0 && b2 === 0) continue;
+        if (b1 === 0xAA || b2 === 0xAA) continue;
+        if (b1 === 0xFF || b2 === 0xFF) continue;
 
         const typePrefix = ['P', 'C', 'B', 'U'][(b1 >> 6) & 0x03];
         const digit1 = (b1 >> 4) & 0x03;
@@ -3141,7 +3149,7 @@ Toque em <em>"⚙️ Provedores"</em> e cole sua chave de API (OpenRouter, Groq,
       const can = document.getElementById('telemetryCanStatus')?.textContent || '--';
       const recentLogs = bleLogs.slice(-10).join('<br>');
       const msg = `
-        <strong>Versão do App:</strong> v1.6.8 (Build 22/11 — proteção canal BLE ausente)<br>
+        <strong>Versão do App:</strong> v1.6.9 (Build 25/11 — DTC e abas corrigidas)<br>
         <strong>Modo OBD Ativo:</strong> ${currentObdMode === 'AD10' ? '⚡ AD10 Nativo (binário 0xAA, cmd BIG-ENDIAN)' : '🔌 ELM327 Universal (AT ASCII)'}<br>
         <strong>Dispositivo:</strong> ${dev}<br>
         <strong>CAN Status:</strong> ${can}<br>
